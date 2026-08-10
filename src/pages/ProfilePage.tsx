@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { 
   ChevronLeft, ArrowUpCircle, ArrowDownCircle, History, Copy, 
   User, Landmark, FileText, Fingerprint, Lock, Smartphone, 
@@ -8,14 +8,34 @@ import {
   RefreshCw, LogOut, ChevronRight
 } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { auth } from '../lib/firebase';
+import { signOut } from 'firebase/auth';
+import { useAuth } from '../contexts/AuthContext';
+import { WithdrawPage } from './WithdrawPage';
 
 type ProfilePageProps = {
   onClose: () => void;
 };
 
 export function ProfilePage({ onClose }: ProfilePageProps) {
-  const MenuItem = ({ icon: Icon, title, isNew = false, rightElement, hasArrow = true }: any) => (
-    <div className="flex items-center justify-between px-4 py-3.5 border-b border-gray-100 last:border-0 hover:bg-gray-50 active:bg-gray-100 cursor-pointer">
+  const { user } = useAuth();
+  const [showWithdraw, setShowWithdraw] = useState(false);
+  
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      onClose(); // Close the profile page, App will unmount Main pages and show WelcomePage
+    } catch (error) {
+      console.error('Logout failed', error);
+    }
+  };
+
+  if (showWithdraw) {
+    return <WithdrawPage onBack={() => setShowWithdraw(false)} />;
+  }
+
+  const MenuItem = ({ icon: Icon, title, isNew = false, rightElement, hasArrow = true, onClick }: any) => (
+    <div onClick={onClick} className="flex items-center justify-between px-4 py-3.5 border-b border-gray-100 last:border-0 hover:bg-gray-50 active:bg-gray-100 cursor-pointer">
       <div className="flex items-center gap-4">
         <Icon className="h-[22px] w-[22px] text-gray-500" strokeWidth={1.5} />
         <div className="flex items-center gap-2">
@@ -53,7 +73,7 @@ export function ProfilePage({ onClose }: ProfilePageProps) {
           <div className="h-[64px] w-[64px] overflow-hidden rounded-full bg-blue-100 mb-3 shadow-sm border border-gray-100">
             <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Garuda" alt="Avatar" className="h-full w-full object-cover" />
           </div>
-          <h2 className="text-[15px] font-bold text-secondary mb-0.5">DewanggaTreders</h2>
+          <h2 className="text-[15px] font-bold text-secondary mb-0.5">{user?.email || 'DewanggaTreders'}</h2>
           <button className="text-[11px] text-primary font-medium hover:underline">Lihat Profil</button>
         </div>
 
@@ -77,7 +97,7 @@ export function ProfilePage({ onClose }: ProfilePageProps) {
                 <ArrowUpCircle className="h-6 w-6 text-primary mb-1.5" strokeWidth={1.5} />
                 <span className="text-[11px] font-bold text-secondary">Deposit</span>
               </button>
-              <button className="flex flex-col items-center justify-center py-4 hover:bg-gray-50 border-x border-gray-100">
+              <button onClick={() => setShowWithdraw(true)} className="flex flex-col items-center justify-center py-4 hover:bg-gray-50 border-x border-gray-100">
                 <ArrowDownCircle className="h-6 w-6 text-primary mb-1.5" strokeWidth={1.5} />
                 <span className="text-[11px] font-bold text-secondary">Withdraw</span>
               </button>
@@ -167,7 +187,7 @@ export function ProfilePage({ onClose }: ProfilePageProps) {
 
           <SectionTitle title="Login" />
           <MenuItem icon={RefreshCw} title="Pindah ke Virtual" />
-          <MenuItem icon={LogOut} title="Keluar" />
+          <MenuItem icon={LogOut} title="Keluar" onClick={handleLogout} />
         </div>
 
         {/* Footer info */}

@@ -1,11 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ChevronRight, ChevronLeft, Calendar, Search, ChevronDown, Timer, Briefcase, Activity, Trophy, Users, Filter } from 'lucide-react';
 import { cn } from '../lib/utils';
-import { LineChart, Line, ResponsiveContainer, YAxis } from 'recharts';
-
-const chartData = Array.from({ length: 50 }, (_, i) => ({
-  value: 6300 + Math.random() * 80 + (i > 25 ? -50 : 20) + (i > 40 ? -20 : 0)
-}));
+import { LineChart, Line, ResponsiveContainer, YAxis, AreaChart, Area } from 'recharts';
+import { AssetDetailsPage } from './AssetDetailsPage';
 
 const shortcuts = [
   { 
@@ -86,18 +83,108 @@ const shortcuts = [
   }
 ];
 
-const trendingStocks = [
-  { code: 'JGLE', name: 'Graha Andrasentra Propertindo Tbk.', price: '83', change: '+4', pct: '+5.06%', up: true, color: 'bg-orange-100 text-orange-500' },
-  { code: 'KOTA', name: 'DMS Propertindo Tbk.', price: '171', change: '+16', pct: '+10.32%', up: true, color: 'bg-yellow-100 text-yellow-600' },
-  { code: 'BUMI', name: 'Bumi Resources Tbk', price: '179', change: '+11', pct: '+6.55%', up: true, color: 'bg-gray-800 text-white' },
-  { code: 'BULL', name: 'Buana Lintas Lautan Tbk.', price: '466', change: '+16', pct: '+3.56%', up: true, color: 'bg-blue-100 text-blue-600' },
-  { code: 'BNBR', name: 'Bakrie & Brothers Tbk', price: '101', change: '+4', pct: '+4.12%', up: true, color: 'bg-orange-50 text-orange-400' },
-  { code: 'TPIA', name: 'Chandra Asri Pacific Tbk.', price: '2,060', change: '-10', pct: '-0.48%', up: false, color: 'bg-blue-500 text-white' },
-  { code: 'VKTR', name: '', price: '890', change: '', pct: '', up: true, color: 'bg-gray-200 text-gray-500' },
+const cryptoSymbols = [
+  { symbol: 'BTCUSDT', name: 'Bitcoin', logo: 'https://cryptologos.cc/logos/bitcoin-btc-logo.png' },
+  { symbol: 'ETHUSDT', name: 'Ethereum', logo: 'https://cryptologos.cc/logos/ethereum-eth-logo.png' },
+  { symbol: 'BNBUSDT', name: 'BNB', logo: 'https://cryptologos.cc/logos/bnb-bnb-logo.png' },
+  { symbol: 'SOLUSDT', name: 'Solana', logo: 'https://cryptologos.cc/logos/solana-sol-logo.png' },
+  { symbol: 'XRPUSDT', name: 'XRP', logo: 'https://cryptologos.cc/logos/xrp-xrp-logo.png' },
+  { symbol: 'ADAUSDT', name: 'Cardano', logo: 'https://cryptologos.cc/logos/cardano-ada-logo.png' },
+  { symbol: 'DOGEUSDT', name: 'Dogecoin', logo: 'https://cryptologos.cc/logos/dogecoin-doge-logo.png' },
 ];
 
 export function SearchPage({ onOpenProfile }: { onOpenProfile?: () => void }) {
   const [activeTab, setActiveTab] = useState('MARKET');
+  const [selectedAsset, setSelectedAsset] = useState<string | null>(null);
+  const [chartData, setChartData] = useState<{value: number}[]>([]);
+  const [btcData, setBtcData] = useState({
+    price: '0.00',
+    change: '0.00',
+    changePercent: '0.00',
+    up: true,
+    open: '0.00',
+    high: '0.00',
+    low: '0.00',
+    vol: '0',
+    quoteVol: '0',
+    freq: '0'
+  });
+  const [cryptoData, setCryptoData] = useState<Record<string, { price: string, change: string, pct: string, up: boolean }>>({});
+
+  useEffect(() => {
+    // Fetch initial chart data
+    fetch('https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1m&limit=50')
+      .then(res => res.json())
+      .then(data => {
+        const formatted = data.map((d: any) => ({ value: parseFloat(d[4]) }));
+        setChartData(formatted);
+      })
+      .catch((err) => {
+        console.error('Failed to fetch initial chart data:', err);
+        // Fallback to empty data, let websocket fill it
+        setChartData(Array.from({ length: 50 }, () => ({ value: 0 })));
+      });
+
+    // Connect to WebSocket for BTC ticker
+    const streams = ['btcusdt@ticker', ...cryptoSymbols.map(c => `${c.symbol.toLowerCase()}@ticker`)].join('/');
+    const ws = new WebSocket(`wss://stream.binance.com:9443/ws/${streams}`);
+    
+    ws.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      const symbol = data.s;
+      
+      if (!symbol) return;
+      
+      const currentPrice = parseFloat(data.c);
+      const change = parseFloat(data.p);
+      const isUp = change >= 0;
+      
+      const formatPrice = (val: number) => {
+        if (val < 1) return val.toLocaleString('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 4 });
+        return val.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      };
+
+      if (symbol === 'BTCUSDT') {
+        setBtcData({
+          price: formatPrice(currentPrice),
+          change: isUp ? `+${formatPrice(change)}` : formatPrice(change),
+          changePercent: parseFloat(data.P).toFixed(2),
+          up: isUp,
+          open: formatPrice(parseFloat(data.o)),
+          high: formatPrice(parseFloat(data.h)),
+          low: formatPrice(parseFloat(data.l)),
+          vol: parseFloat(data.v).toLocaleString('en-US', { maximumFractionDigits: 2 }),
+          quoteVol: (parseFloat(data.q) / 1000000).toFixed(2) + 'M',
+          freq: data.n.toLocaleString('en-US')
+        });
+
+        setChartData(prev => {
+          if (prev.length === 0 || prev[0].value === 0) {
+             return Array.from({ length: 50 }, () => ({ value: currentPrice }));
+          }
+          const newData = [...prev];
+          newData[newData.length - 1] = { value: currentPrice };
+          return newData;
+        });
+      }
+      
+      setCryptoData(prev => ({
+        ...prev,
+        [symbol]: {
+          price: formatPrice(currentPrice),
+          change: isUp ? `+${formatPrice(change)}` : formatPrice(change),
+          pct: `${isUp ? '+' : ''}${parseFloat(data.P).toFixed(2)}%`,
+          up: isUp
+        }
+      }));
+    };
+
+    return () => ws.close();
+  }, []);
+
+  if (selectedAsset) {
+    return <AssetDetailsPage symbol={selectedAsset} onBack={() => setSelectedAsset(null)} />;
+  }
 
   return (
     <div className="flex h-full flex-col bg-white">
@@ -136,59 +223,96 @@ export function SearchPage({ onOpenProfile }: { onOpenProfile?: () => void }) {
 
       <div className="flex-1 overflow-y-auto no-scrollbar pb-10">
         {/* Index Card */}
-        <div className="px-4 py-4">
-          <div className="flex items-center justify-between mb-4">
+        <div className="py-4 cursor-pointer" onClick={() => setSelectedAsset('BTCUSDT')}>
+          <div className="flex items-center justify-between mb-6 px-4">
             <div className="flex items-center gap-2">
-              <span className="rounded bg-secondary px-1.5 py-0.5 text-xs font-bold text-white">IHSG</span>
-              <span className="text-sm font-bold text-secondary">6,351.14</span>
-              <span className="text-xs font-semibold text-primary">+31.53 (+0.50%)</span>
+              <div className="flex items-center rounded overflow-hidden">
+                <div className={cn("w-1.5 h-[24px]", btcData.up ? "bg-primary" : "bg-[#e11d48]")}></div>
+                <span className="bg-[#111827] px-1.5 text-xs font-bold text-white h-[24px] flex items-center">BTC/USDT</span>
+              </div>
+              <span className="text-[17px] font-bold text-secondary">{btcData.price}</span>
+              <span className={cn("text-sm font-medium", btcData.up ? "text-primary" : "text-[#e11d48]")}>{btcData.change} ({btcData.changePercent}%)</span>
             </div>
-            <div className="flex items-center gap-1 text-xs text-primary font-medium">
-              <ChevronLeft className="h-4 w-4" />
-              <span>5 Agu 26</span>
-              <Calendar className="h-3.5 w-3.5" />
-              <ChevronRight className="h-4 w-4 text-gray-300" />
+            <div className="flex items-center gap-1.5 text-[13px] text-primary font-medium">
+              <ChevronLeft className="h-4 w-4" strokeWidth={2.5} />
+              <span>Real-Time</span>
+              <Calendar className="h-4 w-4" strokeWidth={2} />
+              <ChevronRight className="h-4 w-4 text-gray-300" strokeWidth={2.5} />
             </div>
           </div>
 
-          <div className="h-32 w-full">
+          <div className="h-[220px] w-full relative">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={chartData}>
-                <YAxis domain={['dataMin', 'dataMax']} hide />
-                <Line type="monotone" dataKey="value" stroke="var(--color-primary)" strokeWidth={1.5} dot={false} isAnimationActive={false} />
-              </LineChart>
+              <AreaChart data={chartData} margin={{ top: 5, right: 40, left: 0, bottom: 5 }}>
+                <defs>
+                  <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor={btcData.up ? "#00B26A" : "#e11d48"} stopOpacity={0.1}/>
+                    <stop offset="95%" stopColor={btcData.up ? "#00B26A" : "#e11d48"} stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
+                <YAxis 
+                  domain={['dataMin', 'dataMax']} 
+                  orientation="right" 
+                  tick={{ fontSize: 11, fill: '#9ca3af' }}
+                  axisLine={false}
+                  tickLine={false}
+                  dx={10}
+                  tickFormatter={(val) => val.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                />
+                <Area 
+                  type="linear" 
+                  dataKey="value" 
+                  stroke={btcData.up ? "#00B26A" : "#e11d48"} 
+                  strokeWidth={1.5} 
+                  fillOpacity={1} 
+                  fill="url(#colorValue)" 
+                  isAnimationActive={false} 
+                />
+              </AreaChart>
             </ResponsiveContainer>
+            {/* Dashed line */}
+            <div className="absolute top-1/2 left-0 right-14 border-t-2 border-dashed border-gray-300 -mt-px pointer-events-none"></div>
           </div>
 
-          <div className="mt-4 grid grid-cols-4 gap-2 text-[10px]">
-            <div className="col-span-1 border-r border-border pr-2">
-              <p className="font-semibold text-secondary mb-1">Intraday</p>
-              <div className="flex justify-between"><span className="text-gray-500">Open</span><span className="text-primary font-medium">6,338.59</span></div>
-              <div className="flex justify-between"><span className="text-gray-500">High</span><span className="text-primary font-medium">6,367.82</span></div>
-              <div className="flex justify-between"><span className="text-gray-500">Low</span><span className="text-red-500 font-medium">6,316.10</span></div>
+          <div className="mt-6 flex gap-3 px-4">
+            <div className="flex-1 rounded-lg border border-gray-200 p-3 shadow-sm">
+              <p className="font-bold text-gray-500 mb-2 text-[11px]">Intraday</p>
+              <div className="flex flex-col gap-1.5 text-[11px]">
+                <div className="flex justify-between"><span className="text-gray-600">Open</span><span className="text-primary font-medium">{btcData.open}</span></div>
+                <div className="flex justify-between"><span className="text-gray-600">High</span><span className="text-primary font-medium">{btcData.high}</span></div>
+                <div className="flex justify-between"><span className="text-gray-600">Low</span><span className="text-[#e11d48] font-medium">{btcData.low}</span></div>
+              </div>
             </div>
-            <div className="col-span-1 border-r border-border px-2">
-              <p className="font-semibold text-secondary mb-1">All Market</p>
-              <div className="flex justify-between"><span className="text-gray-500">Lot</span><span className="text-primary font-medium">403.58M</span></div>
-              <div className="flex justify-between"><span className="text-gray-500">Value</span><span className="text-primary font-medium">14.93T</span></div>
-              <div className="flex justify-between"><span className="text-gray-500">Freq</span><span className="text-primary font-medium">2.33M</span></div>
-            </div>
-            <div className="col-span-1 border-r border-border px-2">
-              <p className="font-semibold text-secondary mb-1">Regular</p>
-              <div className="flex justify-between"><span className="text-gray-500">Lot</span><span className="text-primary font-medium">361.71M</span></div>
-              <div className="flex justify-between"><span className="text-gray-500">Value</span><span className="text-primary font-medium">13.96T</span></div>
-              <div className="flex justify-between"><span className="text-gray-500">Freq</span><span className="text-primary font-medium">2.33M</span></div>
-            </div>
-            <div className="col-span-1 pl-2">
-              <p className="font-semibold text-secondary mb-1">Nego</p>
-              <div className="flex justify-between"><span className="text-gray-500">Lot</span><span className="text-primary font-medium">41.86M</span></div>
-              <div className="flex justify-between"><span className="text-gray-500">Value</span><span className="text-primary font-medium">970.66B</span></div>
-              <div className="flex justify-between"><span className="text-gray-500">Freq</span><span className="text-primary font-medium">616</span></div>
+            <div className="flex-[2] rounded-lg border border-gray-200 p-3 flex shadow-sm">
+              <div className="flex-1 pr-2">
+                <p className="font-bold text-gray-500 mb-2 text-[11px]">All Market</p>
+                <div className="flex flex-col gap-1.5 text-[11px]">
+                  <div className="flex justify-between"><span className="text-gray-600">Vol</span><span className="text-primary font-medium">{btcData.vol}</span></div>
+                  <div className="flex justify-between"><span className="text-gray-600">Value</span><span className="text-primary font-medium">{btcData.quoteVol}</span></div>
+                  <div className="flex justify-between"><span className="text-gray-600">Freq</span><span className="text-primary font-medium">{btcData.freq}</span></div>
+                </div>
+              </div>
+              <div className="flex-1 px-2 border-x border-gray-100">
+                <p className="font-bold text-gray-500 mb-2 text-[11px]">Regular</p>
+                <div className="flex flex-col gap-1.5 text-[11px]">
+                  <div className="flex justify-between"><span className="text-gray-600">Vol</span><span className="text-primary font-medium">{btcData.vol}</span></div>
+                  <div className="flex justify-between"><span className="text-gray-600">Value</span><span className="text-primary font-medium">{btcData.quoteVol}</span></div>
+                  <div className="flex justify-between"><span className="text-gray-600">Freq</span><span className="text-primary font-medium">{btcData.freq}</span></div>
+                </div>
+              </div>
+              <div className="flex-1 pl-2">
+                <p className="font-bold text-gray-500 mb-2 text-[11px]">Nego</p>
+                <div className="flex flex-col gap-1.5 text-[11px]">
+                  <div className="flex justify-between"><span className="text-gray-600">Vol</span><span className="text-secondary font-medium">-</span></div>
+                  <div className="flex justify-between"><span className="text-gray-600">Value</span><span className="text-secondary font-medium">-</span></div>
+                  <div className="flex justify-between"><span className="text-gray-600">Freq</span><span className="text-secondary font-medium">-</span></div>
+                </div>
+              </div>
             </div>
           </div>
           
-          <div className="flex justify-center mt-4">
-             <ChevronDown className="h-5 w-5 text-primary" />
+          <div className="flex justify-center mt-8">
+             <ChevronDown className="h-6 w-6 text-primary" strokeWidth={3} />
           </div>
         </div>
 
@@ -215,28 +339,33 @@ export function SearchPage({ onOpenProfile }: { onOpenProfile?: () => void }) {
           <h3 className="text-sm font-bold text-secondary">Trending</h3>
         </div>
         
-        <div className="px-4 py-2 flex flex-col gap-1">
-          {trendingStocks.map((stock, i) => (
-            <div key={i} className="flex items-center justify-between py-3 border-b border-gray-100 last:border-0">
-              <div className="flex items-center gap-3">
-                <div className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-xs font-bold shadow-sm", stock.color)}>
-                  {stock.code.substring(0, 2)}
+        <div className="px-4 py-2 flex flex-col gap-1 pb-24">
+          {cryptoSymbols.map((crypto, i) => {
+            const data = cryptoData[crypto.symbol] || { price: '-', change: '-', pct: '-', up: true };
+            return (
+              <div 
+                key={i} 
+                onClick={() => setSelectedAsset(crypto.symbol)}
+                className="flex items-center justify-between py-3 border-b border-gray-100 last:border-0 hover:bg-gray-50 rounded px-2 transition-colors cursor-pointer"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gray-50 shadow-sm border border-gray-100 p-2">
+                    <img src={crypto.logo} alt={crypto.name} className="w-full h-full object-contain" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-secondary">{crypto.symbol.replace('USDT', '')}</h4>
+                    <p className="text-[10px] text-gray-500 truncate w-32">{crypto.name}</p>
+                  </div>
                 </div>
-                <div>
-                  <h4 className="text-sm font-bold text-secondary">{stock.code}</h4>
-                  <p className="text-[10px] text-gray-500 truncate w-32">{stock.name}</p>
-                </div>
-              </div>
-              <div className="text-right">
-                <p className="text-sm font-bold text-secondary">{stock.price}</p>
-                {stock.change && (
-                  <p className={cn("text-xs font-medium", stock.up ? "text-primary" : "text-red-500")}>
-                    {stock.change}({stock.pct})
+                <div className="text-right">
+                  <p className="text-sm font-bold text-secondary">{data.price}</p>
+                  <p className={cn("text-xs font-medium", data.up ? "text-primary" : "text-red-500")}>
+                    {data.change} ({data.pct})
                   </p>
-                )}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </div>

@@ -1,0 +1,22 @@
+--- src/pages/AssetDetailsPage.tsx
++++ src/pages/AssetDetailsPage.tsx
+@@ -248,15 +248,15 @@
+       </div>
+ 
+       {/* Tabs */}
+-      <div className="flex text-[11px] font-bold border-b border-gray-100 overflow-x-auto no-scrollbar">
+-        {['STREAM', 'KEYSTATS', 'ORDERBOOK', 'ANALISIS', 'FINANSIAL', 'SEASONALITY'].map(tab => (
++      <div className="flex items-center text-[11px] font-bold border-b border-gray-100 overflow-x-auto no-scrollbar pt-2">
++        {['STREAM', 'KEYSTATS', 'ORDERBOOK', 'ANALISIS', 'FINANSIAL'].map(tab => (
+           <div 
+             key={tab}
+             onClick={() => setActiveTab(tab)}
+             className={cn(
+-              "px-4 py-3 cursor-pointer whitespace-nowrap border-b-2 relative top-[1px]",
+-              activeTab === tab ? "text-[#00B26A] border-[#00B26A]" : "text-gray-400 border-transparent"
++              "px-4 pb-3 cursor-pointer whitespace-nowrap -mb-[1px]",
++              activeTab === tab ? "text-[#00B26A] border-b-2 border-[#00B26A]" : "text-gray-400 border-b-2 border-transparent"
+             )}
+           >
+             {tab}
+           </div>

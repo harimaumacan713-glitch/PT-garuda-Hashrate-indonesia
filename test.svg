@@ -1,0 +1,11 @@
+<svg viewBox="0 0 100 100" fill="none" stroke="currentColor" strokeWidth="3" className="w-full h-full text-[#00B26A]">
+  {/* Top rectangle */}
+  <rect x="25" y="25" width="50" height="20" />
+  {/* Slot line */}
+  <line x1="35" y1="35" x2="65" y2="35" />
+  {/* Bottom rectangle (paper) */}
+  <rect x="35" y="45" width="30" height="30" />
+  {/* Arrow pointing down on the paper */}
+  <line x1="50" y1="50" x2="50" y2="65" />
+  <polyline points="45,60 50,65 55,60" />
+</svg>

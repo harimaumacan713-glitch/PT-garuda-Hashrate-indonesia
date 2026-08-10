@@ -11,10 +11,25 @@ import { StreamPage } from './pages/StreamPage';
 import { SearchPage } from './pages/SearchPage';
 import { PortfolioPage } from './pages/PortfolioPage';
 import { ProfilePage } from './pages/ProfilePage';
+import { WelcomePage } from './pages/WelcomePage';
+import { useAuth } from './contexts/AuthContext';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('stream');
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center bg-white">
+        <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <WelcomePage onLogin={() => {}} />;
+  }
 
   const renderPage = () => {
     switch (activeTab) {
@@ -28,7 +43,7 @@ export default function App() {
   };
 
   return (
-    <div className="flex h-screen w-full flex-col overflow-hidden bg-background">
+    <div className="flex h-[100dvh] w-full flex-col overflow-hidden bg-background">
       <main className="relative flex-1 overflow-x-hidden bg-background no-scrollbar">
         <AnimatePresence mode="wait">
             <motion.div
