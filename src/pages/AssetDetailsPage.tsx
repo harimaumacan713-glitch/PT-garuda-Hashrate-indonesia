@@ -1,7 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { ChevronLeft, ChevronRight, SquarePen, Clock, Share, Star, LineChart as LineChartIcon, ChevronDown, Moon, ArrowUpRight, ArrowDownRight, Maximize, Info } from 'lucide-react';
-import { cn } from '../lib/utils';
-import { LineChart, Line, ResponsiveContainer, YAxis, XAxis, ReferenceLine } from 'recharts';
+import { 
+  ChevronLeft, ChevronRight, SquarePen, Clock, Share, Star, 
+  LineChart as LineChartIcon, ChevronDown, Moon, ArrowUpRight, 
+  ArrowDownRight, Maximize, Info, Search, ThumbsUp, ThumbsDown, 
+  MessageCircle, DollarSign, SlidersHorizontal, CheckCircle2, MoreHorizontal,
+  Eye, EyeOff
+} from 'lucide-react';
+import { cn, getEffectiveLivePrice } from '../lib/utils';
+import { ResponsiveContainer, AreaChart, Area, YAxis, XAxis, ReferenceLine, Tooltip } from 'recharts';
+import { BuyOrderPage } from './BuyOrderPage';
+import { PortfolioDetailPage } from './PortfolioDetailPage';
+import { useAuth } from '../contexts/AuthContext';
+import { db } from '../lib/firebase';
+import { ref, onValue, set } from 'firebase/database';
 
 interface AssetDetailsPageProps {
   symbol: string;
@@ -10,29 +21,179 @@ interface AssetDetailsPageProps {
 
 const cryptoLogos: Record<string, string> = {
   'BTCUSDT': 'https://cryptologos.cc/logos/bitcoin-btc-logo.png',
+  'BTC': 'https://cryptologos.cc/logos/bitcoin-btc-logo.png',
   'ETHUSDT': 'https://cryptologos.cc/logos/ethereum-eth-logo.png',
+  'ETH': 'https://cryptologos.cc/logos/ethereum-eth-logo.png',
   'BNBUSDT': 'https://cryptologos.cc/logos/bnb-bnb-logo.png',
+  'BNB': 'https://cryptologos.cc/logos/bnb-bnb-logo.png',
   'SOLUSDT': 'https://cryptologos.cc/logos/solana-sol-logo.png',
+  'SOL': 'https://cryptologos.cc/logos/solana-sol-logo.png',
   'XRPUSDT': 'https://cryptologos.cc/logos/xrp-xrp-logo.png',
+  'XRP': 'https://cryptologos.cc/logos/xrp-xrp-logo.png',
   'ADAUSDT': 'https://cryptologos.cc/logos/cardano-ada-logo.png',
+  'ADA': 'https://cryptologos.cc/logos/cardano-ada-logo.png',
   'DOGEUSDT': 'https://cryptologos.cc/logos/dogecoin-doge-logo.png',
+  'DOGE': 'https://cryptologos.cc/logos/dogecoin-doge-logo.png',
+  'AVAXUSDT': 'https://cryptologos.cc/logos/avalanche-avax-logo.png',
+  'AVAX': 'https://cryptologos.cc/logos/avalanche-avax-logo.png',
+  'MATICUSDT': 'https://cryptologos.cc/logos/polygon-matic-logo.png',
+  'MATIC': 'https://cryptologos.cc/logos/polygon-matic-logo.png',
+  'LINKUSDT': 'https://cryptologos.cc/logos/chainlink-link-logo.png',
+  'LINK': 'https://cryptologos.cc/logos/chainlink-link-logo.png',
+  'DOTUSDT': 'https://cryptologos.cc/logos/polkadot-new-dot-logo.png',
+  'DOT': 'https://cryptologos.cc/logos/polkadot-new-dot-logo.png',
+  'NEARUSDT': 'https://cryptologos.cc/logos/near-protocol-near-logo.png',
+  'NEAR': 'https://cryptologos.cc/logos/near-protocol-near-logo.png',
+  'SUIUSDT': 'https://cryptologos.cc/logos/sui-sui-logo.png',
+  'SUI': 'https://cryptologos.cc/logos/sui-sui-logo.png',
+  'PEPEUSDT': 'https://cryptologos.cc/logos/pepe-pepe-logo.png',
+  'PEPE': 'https://cryptologos.cc/logos/pepe-pepe-logo.png',
+  'SHIBUSDT': 'https://cryptologos.cc/logos/shiba-inu-shib-logo.png',
+  'SHIB': 'https://cryptologos.cc/logos/shiba-inu-shib-logo.png',
+  'ATOMUSDT': 'https://cryptologos.cc/logos/cosmos-atom-logo.png',
+  'ATOM': 'https://cryptologos.cc/logos/cosmos-atom-logo.png',
+  'TONUSDT': 'https://cryptologos.cc/logos/toncoin-ton-logo.png',
+  'TON': 'https://cryptologos.cc/logos/toncoin-ton-logo.png',
+  'LTCUSDT': 'https://cryptologos.cc/logos/litecoin-ltc-logo.png',
+  'LTC': 'https://cryptologos.cc/logos/litecoin-ltc-logo.png',
+  'UNIUSDT': 'https://cryptologos.cc/logos/uniswap-uni-logo.png',
+  'UNI': 'https://cryptologos.cc/logos/uniswap-uni-logo.png',
+
+  'NVDA': 'https://upload.wikimedia.org/wikipedia/commons/2/21/Nvidia_logo.svg',
+  'AAPL': 'https://upload.wikimedia.org/wikipedia/commons/f/fa/Apple_logo_black.svg',
+  'TSLA': 'https://upload.wikimedia.org/wikipedia/commons/e/e8/Tesla_logo.png',
+  'MSFT': 'https://upload.wikimedia.org/wikipedia/commons/4/44/Microsoft_logo.svg',
+  'AMZN': 'https://upload.wikimedia.org/wikipedia/commons/a/a9/Amazon_logo.svg',
+  'GOOGL': 'https://upload.wikimedia.org/wikipedia/commons/c/c1/Google_%22G%22_logo.svg',
+  'META': 'https://upload.wikimedia.org/wikipedia/commons/7/7b/Meta_Platforms_Inc._logo.svg',
+  'NFLX': 'https://upload.wikimedia.org/wikipedia/commons/0/08/Netflix_2015_logo.svg',
+  'AMD': 'https://upload.wikimedia.org/wikipedia/commons/7/7c/AMD_Logo.svg',
+  'INTC': 'https://upload.wikimedia.org/wikipedia/commons/7/7d/Intel_logo_%282020%29.svg',
+  'COIN': 'https://upload.wikimedia.org/wikipedia/commons/5/50/Coinbase_Logo_2019.svg',
+
+  'GOLD': 'https://cdn-icons-png.flaticon.com/512/2822/2822831.png',
+  'SILVER': 'https://cdn-icons-png.flaticon.com/512/2822/2822842.png',
+  'SPX': 'https://upload.wikimedia.org/wikipedia/commons/1/18/S%26P_500_logo.svg',
+  'NDX': 'https://upload.wikimedia.org/wikipedia/commons/8/87/Nasdaq_Logo.svg',
+  'EURUSD': 'https://upload.wikimedia.org/wikipedia/commons/5/5c/Euro_symbol.svg',
 };
 
 const cryptoNames: Record<string, string> = {
-  'BTCUSDT': 'Bitcoin',
-  'ETHUSDT': 'Ethereum',
-  'BNBUSDT': 'BNB',
-  'SOLUSDT': 'Solana',
-  'XRPUSDT': 'XRP',
-  'ADAUSDT': 'Cardano',
-  'DOGEUSDT': 'Dogecoin',
+  'BTCUSDT': 'Bitcoin', 'BTC': 'Bitcoin',
+  'ETHUSDT': 'Ethereum', 'ETH': 'Ethereum',
+  'BNBUSDT': 'BNB', 'BNB': 'BNB',
+  'SOLUSDT': 'Solana', 'SOL': 'Solana',
+  'XRPUSDT': 'XRP', 'XRP': 'XRP',
+  'ADAUSDT': 'Cardano', 'ADA': 'Cardano',
+  'DOGEUSDT': 'Dogecoin', 'DOGE': 'Dogecoin',
+  'AVAXUSDT': 'Avalanche', 'AVAX': 'Avalanche',
+  'MATICUSDT': 'Polygon (POL)', 'MATIC': 'Polygon (POL)',
+  'LINKUSDT': 'Chainlink', 'LINK': 'Chainlink',
+  'DOTUSDT': 'Polkadot', 'DOT': 'Polkadot',
+  'NEARUSDT': 'NEAR Protocol', 'NEAR': 'NEAR Protocol',
+  'SUIUSDT': 'Sui Network', 'SUI': 'Sui Network',
+  'PEPEUSDT': 'Pepe Coin', 'PEPE': 'Pepe Coin',
+  'SHIBUSDT': 'Shiba Inu', 'SHIB': 'Shiba Inu',
+  'ATOMUSDT': 'Cosmos', 'ATOM': 'Cosmos',
+  'TONUSDT': 'Toncoin', 'TON': 'Toncoin',
+  'LTCUSDT': 'Litecoin', 'LTC': 'Litecoin',
+  'UNIUSDT': 'Uniswap', 'UNI': 'Uniswap',
+
+  'NVDA': 'NVIDIA Corporation',
+  'AAPL': 'Apple Inc.',
+  'TSLA': 'Tesla, Inc.',
+  'MSFT': 'Microsoft Corporation',
+  'AMZN': 'Amazon.com, Inc.',
+  'GOOGL': 'Alphabet Inc. (Google)',
+  'META': 'Meta Platforms Inc.',
+  'NFLX': 'Netflix Inc.',
+  'AMD': 'Advanced Micro Devices',
+  'INTC': 'Intel Corporation',
+  'COIN': 'Coinbase Global, Inc.',
+
+  'GOLD': 'Gold / Emas Global (XAU/USD)',
+  'SILVER': 'Silver / Perak Global (XAG/USD)',
+  'SPX': 'S&P 500 Index',
+  'NDX': 'NASDAQ 100 Index',
+  'EURUSD': 'EUR / USD Forex',
+};
+
+const stockBasePrices: Record<string, number> = {
+  'NVDA': 128.50, 'AAPL': 224.30, 'TSLA': 210.80, 'MSFT': 448.20,
+  'AMZN': 186.40, 'GOOGL': 172.90, 'META': 512.60, 'NFLX': 635.40,
+  'AMD': 132.10, 'INTC': 20.40, 'COIN': 205.80,
+  'GOLD': 2430.50, 'SILVER': 27.80, 'SPX': 5450.20, 'NDX': 19120.40, 'EURUSD': 1.0925
 };
 
 export function AssetDetailsPage({ symbol, onBack }: AssetDetailsPageProps) {
-  const [activeTab, setActiveTab] = useState('ANALISIS');
-  const [subTab, setSubTab] = useState('Net Income');
-  
-  const [chartData, setChartData] = useState<{time: string, value: number}[]>([]);
+  // Navigation tabs - default STREAM as per reference design
+  const [activeTab, setActiveTab] = useState<'STREAM' | 'KEYSTATS' | 'ORDERBOOK' | 'ANALISIS' | 'FINANSIAL'>('STREAM');
+  const [streamFilter, setStreamFilter] = useState('All');
+  const [streamSearch, setStreamSearch] = useState('');
+  const [timeframe, setTimeframe] = useState('1D');
+  const [showBuyOrder, setShowBuyOrder] = useState(false);
+  const [showPortfolioDetail, setShowPortfolioDetail] = useState(false);
+  const [isStarred, setIsStarred] = useState(true);
+
+  // Firebase assetPrices sync
+  const [assetPrices, setAssetPrices] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    const pricesRef = ref(db, 'assetPrices');
+    const unsub = onValue(pricesRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const val = snapshot.val();
+        const map: Record<string, number> = {};
+        Object.entries(val).forEach(([sym, data]: [string, any]) => {
+          const p = typeof data === 'object' ? data.price : Number(data);
+          map[sym] = p;
+          map[sym.toUpperCase().replace('USDT', '')] = p;
+        });
+        setAssetPrices(map);
+      }
+    });
+    return () => unsub();
+  }, []);
+
+  // User position & investment card state
+  const { user } = useAuth();
+  const [userPosition, setUserPosition] = useState<{
+    symbol: string;
+    stockName: string;
+    lot: number;
+    avgPrice: number;
+    totalCost: number;
+  } | null>(null);
+  const [hideInvestmentValues, setHideInvestmentValues] = useState(false);
+
+  // Subscribe to user position for this symbol
+  useEffect(() => {
+    if (user) {
+      const posRef = ref(db, `users/${user.uid}/positions`);
+      const unsubscribe = onValue(posRef, (snapshot) => {
+        if (snapshot.exists()) {
+          const data = snapshot.val();
+          const positionsList = Object.values(data) as any[];
+          const normSymbol = symbol.toUpperCase().replace('USDT', '');
+          const match = positionsList.find((p: any) => 
+            p.symbol?.toUpperCase() === symbol.toUpperCase() ||
+            p.symbol?.toUpperCase() === normSymbol ||
+            p.symbol?.toUpperCase() === `${normSymbol}USDT`
+          );
+          if (match) {
+            setUserPosition(match);
+          } else {
+            setUserPosition(null);
+          }
+        } else {
+          setUserPosition(null);
+        }
+      });
+      return () => unsubscribe();
+    }
+  }, [user, symbol]);
+
+  const [chartData, setChartData] = useState<{ time: string; value: number }[]>([]);
   const [assetData, setAssetData] = useState({
     price: '0.00',
     change: '0.00',
@@ -40,721 +201,740 @@ export function AssetDetailsPage({ symbol, onBack }: AssetDetailsPageProps) {
     up: true,
     high: '0.00',
     low: '0.00',
+    volume: '0.00',
   });
+
   const [orderBook, setOrderBook] = useState<{
-    bids: { price: string, qty: string }[],
-    asks: { price: string, qty: string }[]
+    bids: { price: string; qty: string }[];
+    asks: { price: string; qty: string }[];
   }>({ bids: [], asks: [] });
-  
-  const [minMax, setMinMax] = useState({ min: 0, max: 0 });
 
+  const displaySymbol = symbol.replace('USDT', '').toUpperCase();
+  const logoUrl = cryptoLogos[symbol] || cryptoLogos[displaySymbol] || 'https://cryptologos.cc/logos/bitcoin-btc-logo.png';
+  const fullName = cryptoNames[symbol] || cryptoNames[displaySymbol] || `${displaySymbol} Crypto Token`;
+
+  // Fetch chart & real-time pricing data dynamically
   useEffect(() => {
-    // Fetch historical data for chart
-    fetch(`https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=1h&limit=100`)
-      .then(res => res.json())
-      .then(data => {
-        const formatted = data.map((d: any) => ({ 
-          time: new Date(d[0]).toLocaleTimeString(),
-          value: parseFloat(d[4]) 
-        }));
-        setChartData(formatted);
-        
-        const values = formatted.map((d: any) => d.value);
-        setMinMax({
-          min: Math.min(...values),
-          max: Math.max(...values)
-        });
-      })
-      .catch(console.error);
+    const cryptoList = ['BTC', 'ETH', 'SOL', 'BNB', 'XRP', 'ADA', 'DOGE', 'AVAX', 'MATIC', 'LINK', 'DOT', 'NEAR', 'SUI', 'PEPE', 'SHIB', 'ATOM', 'TON', 'LTC', 'UNI'];
+    const isCrypto = symbol.endsWith('USDT') || cryptoList.includes(symbol.toUpperCase());
+    const normalizedSymbol = symbol.endsWith('USDT') ? symbol : `${symbol}USDT`;
 
-    // WebSocket for real-time price
-    const ws = new WebSocket(`wss://stream.binance.com:9443/ws/${symbol.toLowerCase()}@ticker`);
-    
-    ws.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      const currentPrice = parseFloat(data.c);
-      const change = parseFloat(data.p);
-      const isUp = change >= 0;
-      
-      const formatPrice = (val: number) => {
-        if (val < 1) return val.toLocaleString('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 4 });
+    if (!isCrypto) {
+      const formatP = (val: number) => {
+        if (val >= 1000) return val.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        if (val < 0.01) return val.toFixed(6);
+        if (val < 10) return val.toFixed(4);
         return val.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
       };
 
-      setAssetData({
-        price: formatPrice(currentPrice),
-        change: isUp ? `+${formatPrice(change)}` : formatPrice(change),
-        pct: `${isUp ? '+' : ''}${parseFloat(data.P).toFixed(2)}%`,
-        up: isUp,
-        high: formatPrice(parseFloat(data.h)),
-        low: formatPrice(parseFloat(data.l))
+      const fetchStockData = async () => {
+        try {
+          const res = await fetch(`/api/quote/${symbol}`);
+          if (!res.ok) return;
+          const json = await res.json();
+          if (json.success && json.quote) {
+            const q = json.quote;
+            const isUp = (q.change || 0) >= 0;
+            setAssetData({
+              price: formatP(q.price),
+              change: `${isUp ? '+' : ''}${formatP(q.change || 0)}`,
+              pct: `${isUp ? '+' : ''}${(q.pctChange || 0).toFixed(2)}%`,
+              up: isUp,
+              high: formatP(q.high || q.price * 1.02),
+              low: formatP(q.low || q.price * 0.98),
+              volume: q.volume ? (q.volume > 1000000 ? (q.volume / 1000000).toFixed(2) + 'M' : q.volume.toLocaleString()) : '18.4M',
+            });
+
+            if (q.chart && q.chart.length > 0) {
+              setChartData(q.chart);
+            }
+
+            const currentPrice = q.price;
+            set(ref(db, `assetPrices/${symbol}`), { symbol, price: currentPrice, updatedAt: Date.now() }).catch(() => {});
+            set(ref(db, `assetPrices/${displaySymbol}`), { symbol: displaySymbol, price: currentPrice, updatedAt: Date.now() }).catch(() => {});
+            setOrderBook({
+              bids: Array.from({ length: 5 }, (_, idx) => ({
+                price: formatP(currentPrice * (1 - (idx + 1) * 0.001)),
+                qty: (Math.random() * 15 + 2).toFixed(1) + 'K'
+              })),
+              asks: Array.from({ length: 5 }, (_, idx) => ({
+                price: formatP(currentPrice * (1 + (idx + 1) * 0.001)),
+                qty: (Math.random() * 15 + 2).toFixed(1) + 'K'
+              }))
+            });
+          }
+        } catch (err) {
+          console.warn('Error fetching stock quote:', err);
+        }
+      };
+
+      fetchStockData();
+      const interval = setInterval(fetchStockData, 3000);
+      return () => clearInterval(interval);
+    }
+
+    // Determine Binance klines limit based on timeframe
+    let limit = 24;
+    let interval = '1h';
+    if (timeframe === '1W') { limit = 28; interval = '6h'; }
+    else if (timeframe === '1M') { limit = 30; interval = '1d'; }
+    else if (timeframe === '3M') { limit = 90; interval = '1d'; }
+    else if (timeframe === '1Y') { limit = 52; interval = '1w'; }
+    else if (timeframe === 'YTD') { limit = 40; interval = '1d'; }
+
+    fetch(`https://api.binance.com/api/v3/klines?symbol=${normalizedSymbol}&interval=${interval}&limit=${limit}`)
+      .then(res => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+      })
+      .then(data => {
+        if (Array.isArray(data)) {
+          const formatted = data.map((d: any) => ({
+            time: new Date(d[0]).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            value: parseFloat(d[4])
+          }));
+          setChartData(formatted);
+        }
+      })
+      .catch((err) => {
+        console.warn('Kline fetch fallback:', err);
+        const base = displaySymbol === 'BTC' ? 97000 : displaySymbol === 'ETH' ? 2700 : displaySymbol === 'SOL' ? 175 : 100;
+        const mock = Array.from({ length: 24 }, (_, i) => ({
+          time: `${i}:00`,
+          value: base + Math.sin(i / 2) * (base * 0.02)
+        }));
+        setChartData(mock);
       });
 
-      setChartData(prev => {
-        if (prev.length === 0) return prev;
-        const newData = [...prev];
-        newData[newData.length - 1] = { time: new Date().toLocaleTimeString(), value: currentPrice };
-        return newData;
-      });
-    };
-    
-    // WebSocket for orderbook
-    const wsDepth = new WebSocket(`wss://stream.binance.com:9443/ws/${symbol.toLowerCase()}@depth10@100ms`);
-    wsDepth.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      if (data.bids && data.asks) {
-        setOrderBook({
-          bids: data.bids.map((b: any) => ({ price: parseFloat(b[0]).toFixed(2), qty: parseFloat(b[1]).toFixed(4) })),
-          asks: data.asks.map((a: any) => ({ price: parseFloat(a[0]).toFixed(2), qty: parseFloat(a[1]).toFixed(4) }))
-        });
-      }
-    };
+    // Real-time Ticker WebSocket
+    let wsTicker: WebSocket | null = null;
+    let wsDepth: WebSocket | null = null;
+
+    try {
+      wsTicker = new WebSocket(`wss://stream.binance.com:9443/ws/${normalizedSymbol.toLowerCase()}@ticker`);
+      wsTicker.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (!data || !data.c) return;
+
+          const currentPrice = parseFloat(data.c);
+          const change = parseFloat(data.p || '0');
+          const isUp = change >= 0;
+
+          const formatNumber = (val: number) => {
+            if (val >= 1000) return val.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            if (val >= 1) return val.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+            return val.toLocaleString('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 6 });
+          };
+
+          setAssetData({
+            price: formatNumber(currentPrice),
+            change: `${isUp ? '+' : ''}${formatNumber(change)}`,
+            pct: `${isUp ? '+' : ''}${parseFloat(data.P || '0').toFixed(2)}%`,
+            up: isUp,
+            high: formatNumber(parseFloat(data.h || '0')),
+            low: formatNumber(parseFloat(data.l || '0')),
+            volume: `${(parseFloat(data.v || '0') / 1000).toFixed(1)}K`,
+          });
+
+          setChartData(prev => {
+            if (prev.length === 0) return prev;
+            const updated = [...prev];
+            updated[updated.length - 1] = {
+              time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+              value: currentPrice
+            };
+            return updated;
+          });
+        } catch (e) {}
+      };
+
+      wsDepth = new WebSocket(`wss://stream.binance.com:9443/ws/${normalizedSymbol.toLowerCase()}@depth10@100ms`);
+      wsDepth.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data && data.bids && data.asks) {
+            setOrderBook({
+              bids: data.bids.slice(0, 5).map((b: any) => ({
+                price: parseFloat(b[0]).toLocaleString('en-US', { minimumFractionDigits: 2 }),
+                qty: parseFloat(b[1]).toFixed(3)
+              })),
+              asks: data.asks.slice(0, 5).map((a: any) => ({
+                price: parseFloat(a[0]).toLocaleString('en-US', { minimumFractionDigits: 2 }),
+                qty: parseFloat(a[1]).toFixed(3)
+              }))
+            });
+          }
+        } catch (e) {}
+      };
+    } catch (e) {}
 
     return () => {
-      ws.close();
-      wsDepth.close();
+      if (wsTicker) wsTicker.close();
+      if (wsDepth) wsDepth.close();
     };
-  }, [symbol]);
+  }, [symbol, timeframe]);
 
-  const displaySymbol = symbol.replace('USDT', '');
-  const logo = cryptoLogos[symbol];
-  const name = cryptoNames[symbol];
+  if (showBuyOrder) {
+    return (
+      <BuyOrderPage
+        symbol={symbol.endsWith('USDT') ? symbol : `${symbol}USDT`}
+        onBack={() => setShowBuyOrder(false)}
+        onOrderSuccess={() => setShowBuyOrder(false)}
+      />
+    );
+  }
+
+  // Dynamic social stream posts tailored to currently selected asset
+  const streamPosts = [
+    {
+      id: '1',
+      author: 'rizal230300',
+      time: '10 Aug 26, 09:40',
+      avatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=rizal',
+      text: `$${displaySymbol} jangan lupa mulai hari ini pergerakan akumulasi aset, wns dlu guys! Tetap disiplin money management. 📈`,
+      likes: 14,
+      dislikes: 1,
+      comments: 6
+    },
+    {
+      id: '2',
+      author: 'Diventra',
+      time: '10 Aug 26, 09:40',
+      avatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=Diventra',
+      text: `$${displaySymbol} yang hari ini lagi di area support penting, ayo $${displaySymbol} kiw kiw ❤️🚀 mari serok bertahap!`,
+      likes: 32,
+      dislikes: 0,
+      comments: 12
+    },
+    {
+      id: '3',
+      author: 'TraderPro_ID',
+      time: '10 Aug 26, 08:15',
+      avatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=TraderPro',
+      text: `Analisis Teknikal $${displaySymbol}: RSI oversold di timeframe 4H. Potensi reversal kuat dalam 24 jam ke depan! Target tp 1 di area resistance terdekat.`,
+      likes: 58,
+      dislikes: 2,
+      comments: 19
+    },
+    {
+      id: '4',
+      author: 'CryptoWhaleWatcher',
+      time: '10 Aug 26, 07:30',
+      avatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=Whale',
+      text: `Alert: Terdeteksi perpindahan volume $${displaySymbol} sebesar 1,200 token ke wallet dingin. Indikasi hold jangka panjang. 💎🙌`,
+      likes: 89,
+      dislikes: 4,
+      comments: 25
+    }
+  ];
+
+  if (showBuyOrder) {
+    return (
+      <BuyOrderPage
+        symbol={symbol}
+        onBack={() => setShowBuyOrder(false)}
+        onOrderSuccess={() => setShowBuyOrder(false)}
+      />
+    );
+  }
+
+  if (showPortfolioDetail) {
+    return (
+      <PortfolioDetailPage
+        symbol={symbol}
+        onBack={() => setShowPortfolioDetail(false)}
+      />
+    );
+  }
 
   return (
-    <div className="flex h-full flex-col bg-white overflow-y-auto">
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 h-14 bg-white sticky top-0 z-20">
-        <button onClick={onBack} className="p-2 -ml-2 text-gray-500 hover:text-gray-900 transition-colors">
-          <ChevronLeft className="w-6 h-6" strokeWidth={1.5} />
+    <div className="flex h-full flex-col bg-white overflow-y-auto no-scrollbar">
+      {/* HEADER */}
+      <div className="flex items-center justify-between px-4 h-12 bg-white sticky top-0 z-20 border-b border-gray-50">
+        <button onClick={onBack} className="p-1.5 -ml-1.5 text-gray-700 hover:text-black transition-colors">
+          <ChevronLeft className="w-6 h-6" strokeWidth={2} />
         </button>
-        <div className="flex items-center gap-4 text-gray-500">
-          <SquarePen className="w-5 h-5 cursor-pointer hover:text-gray-900" strokeWidth={1.5} />
-          <Clock className="w-5 h-5 cursor-pointer hover:text-gray-900" strokeWidth={1.5} />
-          <Share className="w-5 h-5 cursor-pointer hover:text-gray-900" strokeWidth={1.5} />
-          <Star className="w-5 h-5 cursor-pointer text-[#FFD700] fill-[#FFD700]" strokeWidth={1.5} />
+        <div className="flex items-center gap-4 text-gray-600">
+          <SquarePen className="w-5 h-5 cursor-pointer hover:text-black" strokeWidth={1.8} />
+          <Clock className="w-5 h-5 cursor-pointer hover:text-black" strokeWidth={1.8} />
+          <Share className="w-5 h-5 cursor-pointer hover:text-black" strokeWidth={1.8} />
+          <button onClick={() => setIsStarred(!isStarred)}>
+            <Star className={cn("w-5 h-5 cursor-pointer transition-colors", isStarred ? "text-[#FFD700] fill-[#FFD700]" : "text-gray-400")} strokeWidth={1.8} />
+          </button>
         </div>
       </div>
 
-      {/* Asset Header Info */}
-      <div className="px-4 pt-4 pb-2">
+      {/* ASSET HEADER SECTION */}
+      <div className="px-4 pt-3 pb-2">
         <div className="flex justify-between items-start">
           <div>
-            <div className="flex items-center gap-1.5 mb-1">
-              <h1 className="text-[17px] font-bold text-gray-900">{displaySymbol}</h1>
-              <ChevronDown className="w-4 h-4 text-gray-500" strokeWidth={2} />
-              <div className="flex items-center justify-center w-[18px] h-[18px] bg-purple-50 text-[#a855f7] rounded-[3px] text-[10px] font-bold border border-purple-200 ml-1">
-                C
+            <div className="flex items-center gap-1.5 mb-0.5">
+              <h1 className="text-[18px] font-extrabold text-gray-900 tracking-tight">{displaySymbol}</h1>
+              <ChevronDown className="w-4 h-4 text-gray-400" strokeWidth={2.5} />
+              
+              {/* Badges as per image 1 */}
+              <div className="flex items-center justify-center px-1.5 py-0.5 bg-purple-50 text-[#9333ea] rounded text-[10px] font-bold border border-purple-200 ml-1">
+                4x
               </div>
-              <div className="flex items-center justify-center px-1 h-[18px] bg-[#f0fdf4] text-[#00B26A] rounded-[3px] text-[10px] font-bold border border-[#00B26A]">
+              <div className="flex items-center justify-center px-1.5 py-0.5 bg-emerald-50 text-[#00B26A] rounded text-[10px] font-bold border border-emerald-200">
                 TL
               </div>
-              <div className="flex items-center justify-center w-6 h-6 rounded-full border border-gray-200 ml-1">
-                <Moon className="w-3.5 h-3.5 text-[#00B26A]" strokeWidth={2.5} />
-              </div>
             </div>
-            <p className="text-[13px] text-gray-500 mb-4">{name}</p>
-            
-            <div className="flex flex-col gap-0 w-full mb-3">
-              <h2 className="text-[40px] font-bold text-gray-900 leading-none tracking-tight">{assetData.price}</h2>
-              <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 mt-1">
-                <span className="text-[13px] font-medium shrink-0 text-gray-500">
-                  {assetData.change} ({assetData.pct}) Hari Ini
-                </span>
-              </div>
-            </div>
-            
-            <div className="flex flex-wrap items-center gap-2 mt-4">
-              <span className="px-2 py-0.5 rounded border border-[#00B26A] text-[#00B26A] text-[11px] font-medium bg-white whitespace-nowrap">Barang Perindustrian</span>
-              <span className="px-2 py-0.5 rounded border border-[#00B26A] text-[#00B26A] text-[11px] font-medium bg-white whitespace-nowrap">DBX</span>
-            </div>
+            <p className="text-[12px] text-gray-500 font-medium mb-3">{fullName}</p>
           </div>
-          <div className="w-[50px] h-[50px] rounded-full bg-gray-50 border border-gray-100 flex items-center justify-center p-2 mt-2">
-             <img src={logo} alt={name} className="w-full h-full object-contain" />
+
+          {/* Asset Logo Image */}
+          <div className="w-[46px] h-[46px] rounded-full bg-red-500 flex items-center justify-center p-1.5 shadow-sm overflow-hidden shrink-0 mt-1">
+            <img 
+              src={logoUrl} 
+              alt={fullName} 
+              className="w-full h-full object-contain"
+              onError={(e) => {
+                // Fallback to stylized logo if network icon fails
+                (e.target as HTMLElement).style.display = 'none';
+              }} 
+            />
+          </div>
+        </div>
+
+        {/* PRICE DISPLAY */}
+        <div className="flex flex-col mt-1">
+          <h2 className="text-[36px] font-black text-gray-900 leading-none tracking-tight">
+            {assetData.price}
+          </h2>
+          <div className="flex items-center gap-1.5 mt-2">
+            <span className={cn(
+              "text-[13px] font-bold flex items-center gap-0.5",
+              assetData.up ? "text-[#00B26A]" : "text-[#e11d48]"
+            )}>
+              {assetData.up ? '↗' : '↘'} {assetData.change} ({assetData.pct})
+            </span>
+            <span className="text-[12px] text-gray-400 font-medium">Hari Ini</span>
+          </div>
+        </div>
+
+        {/* CATEGORY / TAG PILLS */}
+        <div className="flex flex-wrap items-center gap-2 mt-3.5">
+          <span className="px-2.5 py-1 rounded border border-[#00B26A] text-[#00B26A] text-[11px] font-bold bg-emerald-50/30">
+            Kripto
+          </span>
+          <span className="px-2.5 py-1 rounded border border-[#00B26A] text-[#00B26A] text-[11px] font-bold bg-emerald-50/30">
+            Spot
+          </span>
+          <span className="px-2.5 py-1 rounded border border-[#00B26A] text-[#00B26A] text-[11px] font-bold bg-emerald-50/30">
+            24H Trade
+          </span>
+        </div>
+      </div>
+
+      {/* CHART UTAMA */}
+      <div className="px-4 mt-4 h-60 relative w-full">
+        <ResponsiveContainer width="100%" height="100%">
+          <AreaChart data={chartData} margin={{ top: 15, right: 35, left: 0, bottom: 0 }}>
+            <defs>
+              <linearGradient id="chartFill" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor={assetData.up ? "#00B26A" : "#e11d48"} stopOpacity={0.25}/>
+                <stop offset="95%" stopColor={assetData.up ? "#00B26A" : "#e11d48"} stopOpacity={0.0}/>
+              </linearGradient>
+            </defs>
+            <YAxis 
+              domain={['dataMin', 'dataMax']} 
+              orientation="right" 
+              axisLine={false} 
+              tickLine={false}
+              tick={{ fontSize: 10, fill: '#9ca3af', fontWeight: 600 }}
+              dx={4}
+              tickFormatter={(val) => val >= 1000 ? val.toLocaleString('en-US', { maximumFractionDigits: 0 }) : val.toString()}
+            />
+            <Tooltip
+              content={({ active, payload }) => {
+                if (active && payload && payload.length) {
+                  return (
+                    <div className="bg-gray-900 text-white text-[10px] font-bold px-2 py-1 rounded shadow-md">
+                      {payload[0].value?.toLocaleString('en-US')}
+                    </div>
+                  );
+                }
+                return null;
+              }}
+            />
+            <ReferenceLine y={chartData.length > 0 ? chartData[0].value : 0} stroke="#e5e7eb" strokeDasharray="3 3" />
+            <Area 
+              type="monotone" 
+              dataKey="value" 
+              stroke={assetData.up ? "#00B26A" : "#e11d48"} 
+              strokeWidth={2.5} 
+              fillOpacity={1}
+              fill="url(#chartFill)"
+              isAnimationActive={false}
+            />
+          </AreaChart>
+        </ResponsiveContainer>
+
+        {/* High & Low Price Tags on Chart */}
+        <div className="absolute top-1 left-1/2 transform -translate-x-1/2 text-[10px] font-bold text-[#00B26A] bg-white px-1.5 py-0.5 rounded border border-emerald-100 shadow-2xs">
+          {assetData.high}
+        </div>
+        <div className="absolute bottom-6 left-1/4 text-[10px] font-bold text-[#00B26A] bg-white px-1.5 py-0.5 rounded border border-emerald-100 shadow-2xs">
+          {assetData.low}
+        </div>
+
+        {/* Maximize Icon */}
+        <div className="absolute bottom-0 right-3 p-1.5 bg-gray-50 rounded-md border border-gray-200 cursor-pointer text-gray-500 hover:text-black">
+          <Maximize className="w-3.5 h-3.5" />
+        </div>
+      </div>
+
+      {/* TIMEFRAME SELECTOR */}
+      <div className="px-4 mt-3 w-full border-b border-gray-100 pb-2">
+        <div className="flex items-center justify-between text-[11px] font-bold overflow-x-auto no-scrollbar gap-4">
+          {['1D', '1W', '1M', '3M', 'YTD', '1Y', '3Y', '5Y'].map((tf) => (
+            <button
+              key={tf}
+              onClick={() => setTimeframe(tf)}
+              className={cn(
+                "pb-2 relative whitespace-nowrap transition-colors",
+                timeframe === tf ? "text-[#00B26A]" : "text-gray-400 hover:text-gray-600"
+              )}
+            >
+              {tf}
+              {timeframe === tf && (
+                <div className="absolute bottom-0 left-0 right-0 h-[2.5px] bg-[#00B26A] rounded-full" />
+              )}
+            </button>
+          ))}
+          <div className="flex items-center gap-2 text-gray-400 shrink-0 ml-auto pl-2 border-l border-gray-100">
+            <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4 cursor-pointer hover:text-gray-600">
+              <path d="M12 4V20M8 8L12 4L16 8M8 16L12 20L16 16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+            <LineChartIcon className="w-4 h-4 text-[#00B26A] cursor-pointer" />
           </div>
         </div>
       </div>
 
-      {/* Chart */}
-      <div className="px-4 mt-6 h-64 relative w-full">
-         <ResponsiveContainer width="100%" height="100%">
-           <LineChart data={chartData} margin={{ top: 20, right: 40, left: 0, bottom: 0 }}>
-             <YAxis 
-               domain={['dataMin', 'dataMax']} 
-               orientation="right" 
-               axisLine={false} 
-               tickLine={false}
-               tick={{ fontSize: 10, fill: '#9ca3af' }}
-               dx={2}
-               tickFormatter={(val) => val.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-             />
-             <ReferenceLine y={chartData.length > 0 ? chartData[0].value : 0} stroke="#e5e7eb" strokeDasharray="3 3" />
-             <Line 
-               type="stepAfter" 
-               dataKey="value" 
-               stroke={assetData.up ? "#00B26A" : "#e11d48"} 
-               strokeWidth={2} 
-               dot={false}
-               isAnimationActive={false}
-             />
-           </LineChart>
-         </ResponsiveContainer>
-         {/* High Low labels overlaid */}
-         <div className="absolute top-0 left-1/2 transform -translate-x-1/2 text-[10px] font-bold text-[#00B26A] bg-white px-1">
-            {assetData.high}
-         </div>
-         <div className="absolute bottom-6 left-1/4 text-[10px] font-bold text-[#00B26A] bg-white px-1">
-            {assetData.low}
-         </div>
-         <div className="absolute bottom-0 right-4 p-1.5 bg-gray-50 rounded-md border border-gray-100 cursor-pointer text-gray-500 hover:text-gray-900 flex items-center justify-center">
-           <Maximize className="w-3.5 h-3.5" />
-         </div>
-      </div>
-
-      {/* Timeframes */}
-      <div className="px-4 mt-4 w-full overflow-hidden">
-        <div className="flex items-center justify-between gap-4 text-[11px] font-bold border-b border-gray-100 pb-2 overflow-x-auto no-scrollbar">
-          <span className="text-[#00B26A] border-b-2 border-[#00B26A] pb-2 -mb-[9px] shrink-0">1D</span>
-          <span className="text-gray-400 shrink-0 cursor-pointer">1W</span>
-          <span className="text-gray-400 shrink-0 cursor-pointer">1M</span>
-          <span className="text-gray-400 shrink-0 cursor-pointer">3M</span>
-          <span className="text-gray-400 shrink-0 cursor-pointer">YTD</span>
-          <span className="text-gray-400 shrink-0 cursor-pointer">1Y</span>
-          <span className="text-gray-400 shrink-0 cursor-pointer">3Y</span>
-          <span className="text-gray-400 shrink-0 cursor-pointer">5Y</span>
-          <div className="flex items-center gap-1.5 text-gray-400 shrink-0 ml-2">
-             <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4"><path d="M12 4V20M8 8L12 4L16 8M8 16L12 20L16 16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-             <LineChartIcon className="w-4 h-4 text-[#00B26A]" />
-          </div>
-        </div>
-      </div>
-
-      <div className="px-4 mt-4 mb-2 flex flex-col gap-3">
-        <button className="w-full bg-[#00B26A] text-white font-bold py-3.5 rounded-lg text-sm hover:bg-[#00995c] transition-colors shadow-sm">
+      {/* BUTTON BELI - FULL WIDTH */}
+      <div className="px-4 mt-4 mb-2">
+        <button 
+          onClick={() => setShowBuyOrder(true)} 
+          className="w-full bg-[#00B26A] text-white font-black py-3.5 rounded-lg text-sm hover:bg-[#00995c] active:scale-[0.99] transition-all shadow-sm"
+        >
           Beli
         </button>
-        
-        <div className="flex items-center justify-between p-3 border border-purple-200 bg-white rounded-[6px] cursor-pointer mt-1">
-          <div className="flex items-center gap-3">
-            <div className="flex items-center justify-center w-5 h-5 bg-purple-50 text-[#a855f7] rounded-[3px] text-[10px] font-bold border border-purple-200">
-              C
-            </div>
-            <span className="text-[11px] text-gray-600 font-medium tracking-tight">Perusahaan memiliki Corporate Action</span>
-          </div>
-          <ChevronRight className="w-3.5 h-3.5 text-purple-300" />
-        </div>
       </div>
 
-      {/* Tabs */}
-      <div className="w-full overflow-hidden">
-        <div className="flex items-center text-[11px] font-bold border-b border-gray-100 overflow-x-auto no-scrollbar pt-2 px-2">
-          {['KEYSTATS', 'ORDERBOOK', 'ANALISIS', 'FINANSIAL', 'SEASONALITY'].map(tab => (
-            <div 
+      {/* NAVIGATION TAB BAR */}
+      <div className="w-full border-b border-gray-100 mt-2 bg-white sticky top-12 z-10">
+        <div className="flex items-center text-[11px] font-bold overflow-x-auto no-scrollbar px-2">
+          {(['STREAM', 'KEYSTATS', 'ORDERBOOK', 'ANALISIS', 'FINANSIAL'] as const).map(tab => (
+            <button
               key={tab}
               onClick={() => setActiveTab(tab)}
               className={cn(
-                "px-3 pb-3 cursor-pointer whitespace-nowrap -mb-[1px] shrink-0",
-                activeTab === tab ? "text-[#00B26A] border-b-2 border-[#00B26A]" : "text-gray-400 border-b-2 border-transparent"
+                "px-3.5 py-3 cursor-pointer whitespace-nowrap relative shrink-0 transition-colors",
+                activeTab === tab ? "text-[#00B26A]" : "text-gray-400 hover:text-gray-600"
               )}
             >
               {tab}
-            </div>
+              {activeTab === tab && (
+                <div className="absolute bottom-0 left-0 right-0 h-[2.5px] bg-[#00B26A] rounded-full" />
+              )}
+            </button>
           ))}
         </div>
       </div>
 
-      {/* Sub tabs */}
-      {activeTab === 'KEYSTATS' && (
-        <div className="pb-24">
-          <div className="px-4 py-3">
-             <div className="bg-[#f0fdf4] border border-[#bbf7d0] rounded p-3 flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-[#00B26A] shrink-0"></div>
-                <span className="text-[11px] text-gray-600 font-medium">Data yang ditandai dengan bulatan hijau telah diupdate (Q2, 30 Jun 2026)</span>
-             </div>
-          </div>
+      {/* TAB CONTENT: STREAM (DEFAULT) */}
+      {activeTab === 'STREAM' && (
+        <div className="pb-24 bg-white">
+          {/* CARD INVESTASI SAYA (JIKA USER MEMILIKI ASET INI) */}
+          {userPosition && userPosition.lot > 0 && (() => {
+            const cleanSym = symbol.toUpperCase().replace('USDT', '');
+            const livePrice = assetPrices[symbol] ?? assetPrices[cleanSym] ?? assetPrices[displaySymbol] ?? parseFloat(assetData.price.replace(/,/g, '')) ?? userPosition.avgPrice ?? 97;
+            const currentNumericPrice = getEffectiveLivePrice(userPosition.avgPrice, livePrice, 97);
+            const posShares = userPosition.lot * 100;
+            const posCostBasis = (userPosition.avgPrice || 0) * posShares;
+            const posMarketVal = posShares * currentNumericPrice;
+            const posPnL = posMarketVal - posCostBasis;
+            const posPnLPct = posCostBasis > 0 ? (posPnL / posCostBasis) * 100 : 0;
+            const isPosUp = posPnL >= 0;
 
-          <div className="flex items-center justify-between px-4 pb-3 border-b border-gray-50 overflow-x-auto no-scrollbar gap-4">
-             <div className="flex gap-2 shrink-0">
-               {['Net Income', 'EPS', 'Revenue'].map(tab => (
-                 <div 
-                   key={tab}
-                   onClick={() => setSubTab(tab)}
-                   className={cn(
-                     "px-4 py-1.5 rounded-full text-[12px] font-bold cursor-pointer border transition-colors whitespace-nowrap",
-                     subTab === tab ? "border-[#00B26A] text-[#00B26A] bg-white" : "border-gray-200 text-gray-500 bg-white"
-                   )}
-                 >
-                   {tab}
-                 </div>
-               ))}
-             </div>
-             <div className="flex gap-3 text-gray-400 shrink-0 ml-auto">
-               <ChevronLeft className="w-4 h-4" />
-               <ChevronRight className="w-4 h-4" />
-             </div>
-          </div>
+            return (
+              <div className="mx-4 mt-3 mb-2 bg-white border border-gray-100 rounded-xl shadow-xs overflow-hidden relative">
+                {/* Accent strip on left */}
+                <div className={cn(
+                  "absolute left-0 top-0 bottom-0 w-1",
+                  isPosUp ? "bg-[#00B26A]" : "bg-[#e11d48]"
+                )} />
 
-          {/* Table Data */}
-          <div className="overflow-x-auto no-scrollbar pb-6 w-full">
-            <table className="w-full text-right text-[12px] whitespace-nowrap min-w-[450px]">
-              <thead>
-                <tr className="text-gray-900 border-b border-gray-100">
-                  <th className="py-4 px-4 font-bold text-left min-w-[120px]">Period</th>
-                  <th className="py-4 px-6 font-bold">2026</th>
-                  <th className="py-4 px-6 font-bold">2025</th>
-                  <th className="py-4 px-6 font-bold">2024</th>
-                  <th className="py-4 px-6 font-bold">2023</th>
-                  <th className="py-4 px-6 font-bold">2022</th>
-                </tr>
-              </thead>
-              <tbody className="text-gray-700">
-                <tr>
-                  <td className="py-4 px-4 text-left font-bold text-gray-900">Q1</td>
-                  <td className="py-4 px-6">6 B</td>
-                  <td className="py-4 px-6">2 B</td>
-                  <td className="py-4 px-6">(1 B)</td>
-                  <td className="py-4 px-6">(2 B)</td>
-                  <td className="py-4 px-6">(1 B)</td>
-                </tr>
-                <tr>
-                  <td className="py-4 px-4 text-left font-bold text-gray-900">
-                    <div className="flex items-center gap-2">
-                      <div className="w-1.5 h-1.5 rounded-full bg-[#00B26A]"></div> Q2
+                <div className="p-3.5 pl-4">
+                  {/* Top Header */}
+                  <div className="flex items-center justify-between mb-2">
+                    <div 
+                      onClick={() => setShowPortfolioDetail(true)}
+                      className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity"
+                    >
+                      <span className="text-[13px] font-bold text-gray-800">
+                        Investasi Saya di <span className="font-extrabold text-gray-900">{displaySymbol}</span>
+                      </span>
                     </div>
-                  </td>
-                  <td className="py-4 px-6">(18 B)</td>
-                  <td className="py-4 px-6">900 M</td>
-                  <td className="py-4 px-6">(1 B)</td>
-                  <td className="py-4 px-6">(2 B)</td>
-                  <td className="py-4 px-6">(2 B)</td>
-                </tr>
-                <tr>
-                  <td className="py-4 px-4 text-left font-bold text-gray-900">Q3</td>
-                  <td className="py-4 px-6">-</td>
-                  <td className="py-4 px-6">4 B</td>
-                  <td className="py-4 px-6">(3 B)</td>
-                  <td className="py-4 px-6">117 M</td>
-                  <td className="py-4 px-6">(19 M)</td>
-                </tr>
-                <tr>
-                  <td className="py-4 px-4 text-left font-bold text-gray-900">Q4</td>
-                  <td className="py-4 px-6">-</td>
-                  <td className="py-4 px-6">13 B</td>
-                  <td className="py-4 px-6">(3 B)</td>
-                  <td className="py-4 px-6">(37 M)</td>
-                  <td className="py-4 px-6">(1 B)</td>
-                </tr>
-                <tr>
-                  <td className="py-4 px-4 text-left font-bold text-gray-900">
-                    <div className="flex items-center gap-2">
-                      <div className="w-1.5 h-1.5 rounded-full bg-[#00B26A]"></div> Annualised
+                    <div className="flex items-center gap-1.5">
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setHideInvestmentValues(!hideInvestmentValues);
+                        }}
+                        className="text-gray-400 hover:text-gray-600 transition-colors p-0.5"
+                      >
+                        {hideInvestmentValues ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                      <button 
+                        onClick={() => setShowPortfolioDetail(true)}
+                        className="text-gray-400 hover:text-gray-600 p-0.5 cursor-pointer"
+                      >
+                        <ChevronRight className="w-5 h-5" />
+                      </button>
                     </div>
-                  </td>
-                  <td className="py-4 px-6">(25 B)</td>
-                  <td className="py-4 px-6">19 B</td>
-                  <td className="py-4 px-6">(9 B)</td>
-                  <td className="py-4 px-6">(4 B)</td>
-                  <td className="py-4 px-6">(5 B)</td>
-                </tr>
-                <tr>
-                  <td className="py-4 px-4 text-left font-bold text-gray-900">
-                    <div className="flex items-center gap-2">
-                      <div className="w-1.5 h-1.5 rounded-full bg-[#00B26A]"></div> TTM (Q2)
+                  </div>
+
+                  {/* Market Value Row */}
+                  <div className="mb-3">
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-[20px] font-black text-gray-900 tracking-tight">
+                        {hideInvestmentValues ? 'Rp ***' : `Rp ${Math.round(posMarketVal).toLocaleString('en-US')}`}
+                      </span>
+                      <span className={cn(
+                        "text-[12px] font-bold",
+                        isPosUp ? "text-[#00B26A]" : "text-[#e11d48]"
+                      )}>
+                        {hideInvestmentValues ? '***' : `${isPosUp ? '+' : ''}${posPnLPct.toFixed(2)}%`}
+                      </span>
                     </div>
-                  </td>
-                  <td className="py-4 px-6">4 B</td>
-                  <td className="py-4 px-6">19 B</td>
-                  <td className="py-4 px-6">(9 B)</td>
-                  <td className="py-4 px-6">(4 B)</td>
-                  <td className="py-4 px-6">(5 B)</td>
-                </tr>
-                
-                {/* Empty spacer row */}
-                <tr><td colSpan={6} className="h-6"></td></tr>
+                    <span className="text-[11px] text-gray-400 font-medium block mt-0.5">Market Value</span>
+                  </div>
 
-                {/* Dividend rows */}
-                <tr>
-                  <td className="py-4 px-4 text-left font-bold text-gray-900">Dividend (TTM)</td>
-                  <td className="py-4 px-6">-</td>
-                  <td className="py-4 px-6">-</td>
-                  <td className="py-4 px-6">-</td>
-                  <td className="py-4 px-6">-</td>
-                  <td className="py-4 px-6">-</td>
-                </tr>
-                <tr>
-                  <td className="py-4 px-4 text-left font-bold text-gray-900">Payout Ratio</td>
-                  <td className="py-4 px-6">-</td>
-                  <td className="py-4 px-6">-</td>
-                  <td className="py-4 px-6">-</td>
-                  <td className="py-4 px-6">-</td>
-                  <td className="py-4 px-6">-</td>
-                </tr>
-                <tr>
-                  <td className="py-4 px-4 text-left font-bold text-gray-900">Dividend Yield</td>
-                  <td className="py-4 px-6">-</td>
-                  <td className="py-4 px-6">-</td>
-                  <td className="py-4 px-6">-</td>
-                  <td className="py-4 px-6">-</td>
-                  <td className="py-4 px-6">-</td>
-                </tr>
-              </tbody>
-            </table>
+                  {/* 3 Columns Grid */}
+                  <div className="grid grid-cols-3 gap-2 pt-3 border-t border-gray-100">
+                    <div>
+                      <span className="text-[12px] font-bold text-gray-900 block">
+                        {hideInvestmentValues ? 'Rp ***' : `Rp ${userPosition.avgPrice?.toLocaleString('en-US')}`}
+                      </span>
+                      <span className="text-[11px] text-gray-400 font-medium">Avg Price</span>
+                    </div>
+
+                    <div className="border-l border-gray-100 pl-3">
+                      <span className="text-[12px] font-bold text-gray-900 block">
+                        {hideInvestmentValues ? '***' : userPosition.lot?.toLocaleString('en-US')}
+                      </span>
+                      <span className="text-[11px] text-gray-400 font-medium">Bal Lot</span>
+                    </div>
+
+                    <div className="border-l border-gray-100 pl-3">
+                      <span className={cn(
+                        "text-[12px] font-bold block",
+                        isPosUp ? "text-[#00B26A]" : "text-[#e11d48]"
+                      )}>
+                        {hideInvestmentValues ? 'Rp ***' : `${isPosUp ? '+Rp ' : '-Rp '}${Math.abs(Math.round(posPnL)).toLocaleString('en-US')}`}
+                      </span>
+                      <span className="text-[11px] text-gray-400 font-medium">P/L</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Stream Filter Chips */}
+          <div className="px-4 pt-3 pb-2 flex items-center justify-between gap-2 overflow-x-auto no-scrollbar">
+            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+              {['All', 'Notes', 'Berita', 'Laporan', 'Riset', 'Ide', 'Prediksi', 'Polling'].map((chip) => (
+                <button
+                  key={chip}
+                  onClick={() => setStreamFilter(chip)}
+                  className={cn(
+                    "px-3 py-1 rounded-full text-[11px] font-semibold border whitespace-nowrap transition-colors",
+                    streamFilter === chip 
+                      ? "bg-white border-[#00B26A] text-[#00B26A]" 
+                      : "bg-white border-gray-200 text-gray-500 hover:bg-gray-50"
+                  )}
+                >
+                  {chip}
+                </button>
+              ))}
+            </div>
+            <button className="p-1.5 rounded-full border border-gray-200 text-gray-500 shrink-0 hover:bg-gray-50">
+              <SlidersHorizontal className="w-3.5 h-3.5" />
+            </button>
           </div>
-          
-          <div className="h-2 bg-gray-50 w-full"></div>
 
-          {/* Market Cap stats */}
-          <div className="px-4 py-4 text-[12px] flex flex-col gap-4">
-             <div className="flex justify-between items-start gap-4">
-                <span className="text-gray-600">Market Cap</span>
-                <span className="font-bold text-gray-900 text-[13px] text-right whitespace-nowrap">27,650 B</span>
-             </div>
-             <div className="flex justify-between items-start gap-4">
-                <span className="text-gray-600">Current Share Outstanding</span>
-                <span className="font-bold text-gray-900 text-[13px] text-right whitespace-nowrap">263.34 B</span>
-             </div>
-             <div className="flex justify-between items-start gap-4">
-                <span className="text-gray-600">Free Float</span>
-                <span className="font-bold text-gray-900 text-[13px] text-right whitespace-nowrap">22.00%</span>
-             </div>
+          {/* Search Box */}
+          <div className="px-4 py-2">
+            <div className="flex items-center gap-2 bg-gray-50 border border-gray-100 rounded-lg px-3 py-2">
+              <Search className="w-4 h-4 text-gray-400" />
+              <input 
+                type="text"
+                value={streamSearch}
+                onChange={(e) => setStreamSearch(e.target.value)}
+                placeholder="Cari Stream"
+                className="w-full bg-transparent text-xs text-gray-800 outline-none placeholder:text-gray-400"
+              />
+            </div>
           </div>
-          
-          <div className="h-2 bg-gray-50 w-full"></div>
 
-          {/* Expandable Sections */}
-          {[
-            { title: 'Valuation', items: [
-                { label: 'Current PE Ratio (Annualised)', value: '551.20' },
-                { label: 'Current PE Ratio (TTM)', value: '61.61' },
-                { label: 'Forward PE Ratio', value: '-' },
-                { label: 'Current Price to Sales (TTM)', value: '7.05' },
-                { label: 'Current Price to Book Value', value: '7.15' },
-                { label: 'Current Price To Cashflow (TTM)', value: '-63.89' },
-                { label: 'Current Price To Free Cashflow (TTM)', value: '-63.89' },
-                { label: 'EV to EBITDA (TTM)', value: '86.79' }
-              ]
-            },
-            { title: 'Per Share', items: [
-                { label: 'Current EPS (TTM)', value: '1.70' },
-                { label: 'Current EPS (Annualised)', value: '0.19' },
-                { label: 'Revenue Per Share (TTM)', value: '14.90' },
-                { label: 'Cash Per Share (Quarter)', value: '0.79' },
-                { label: 'Current Book Value Per Share', value: '14.69' },
-                { label: 'Free Cashflow Per Share (TTM)', value: '-1.64' }
-              ]
-            },
-            { title: 'Solvency', items: [
-                { label: 'Current Ratio (Quarter)', value: '1.31' },
-                { label: 'Quick Ratio (Quarter)', value: '1.12' },
-                { label: 'Debt to Equity Ratio (Quarter)', value: '4.38' }
-              ]
-            },
-            { title: 'Profitability', items: [
-                { label: 'Return on Assets (TTM)', value: '1.85%' },
-                { label: 'Return on Equity (TTM)', value: '11.60%' },
-                { label: 'Gross Profit Margin (Quarter)', value: '33.01%' },
-                { label: 'Operating Profit Margin (Quarter)', value: '18.67%' },
-                { label: 'Net Profit Margin (Quarter)', value: '1.10%' }
-              ]
-            },
-            { title: 'Management Effectiveness', items: [
-                { label: 'Return on Assets (TTM)', value: '1.85%' },
-                { label: 'Return on Equity (TTM)', value: '11.60%' },
-                { label: 'Return On Capital Employed (TTM)', value: '1.32%' },
-                { label: 'Return On Invested Capital (TTM)', value: '1.18%' },
-                { label: 'Days Sales Outstanding (Quarter)', value: '68.81' },
-                { label: 'Days Inventory (Quarter)', value: '82.69' },
-                { label: 'Days Payables Outstanding (Quarter)', value: '110.85' }
-              ]
-            }
-          ].map((section) => (
-             <div key={section.title}>
-               <div className="flex items-center justify-between px-4 py-4 bg-gray-50/50 cursor-pointer text-[13px] font-bold text-gray-900">
-                  <span>{section.title}</span>
-                  <ChevronRight className="w-4 h-4 text-gray-400" />
-               </div>
-               <div className="px-4 py-2 flex flex-col gap-4 bg-white text-[12px] mb-2">
-                 {section.items.map((item, i) => (
-                   <div key={i} className="flex justify-between items-start gap-4">
-                     <span className="text-gray-600">{item.label}</span>
-                     <span className="font-bold text-gray-900 text-right whitespace-nowrap">{item.value}</span>
-                   </div>
-                 ))}
-               </div>
-               <div className="h-1 bg-gray-50 w-full"></div>
-             </div>
-          ))}
+          {/* Stream Feed Posts */}
+          <div className="divide-y divide-gray-100 mt-2">
+            {streamPosts
+              .filter(p => !streamSearch || p.text.toLowerCase().includes(streamSearch.toLowerCase()))
+              .map((post) => (
+                <div key={post.id} className="p-4 hover:bg-gray-50/50 transition-colors">
+                  {/* Post Author */}
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2.5">
+                      <img src={post.avatar} alt={post.author} className="w-9 h-9 rounded-full bg-gray-100 border border-gray-200" />
+                      <div>
+                        <div className="flex items-center gap-1">
+                          <span className="text-[13px] font-bold text-gray-900">{post.author}</span>
+                          <CheckCircle2 className="w-3.5 h-3.5 text-[#00B26A] fill-emerald-100" />
+                        </div>
+                        <span className="text-[10px] text-gray-400 font-medium">{post.time}</span>
+                      </div>
+                    </div>
+                    <button className="text-gray-400 hover:text-gray-600">
+                      <MoreHorizontal className="w-5 h-5" />
+                    </button>
+                  </div>
 
+                  {/* Post Text */}
+                  <p className="text-[13px] text-gray-800 leading-relaxed font-normal mb-3">
+                    {post.text.split(`$${displaySymbol}`).map((part, index, array) => (
+                      <React.Fragment key={index}>
+                        {part}
+                        {index < array.length - 1 && (
+                          <span className="font-extrabold text-[#00B26A] hover:underline cursor-pointer">
+                            ${displaySymbol}
+                          </span>
+                        )}
+                      </React.Fragment>
+                    ))}
+                  </p>
+
+                  {/* Action Icons */}
+                  <div className="flex items-center justify-between text-gray-400 text-xs pt-1 max-w-[280px]">
+                    <button className="flex items-center gap-1 hover:text-emerald-600">
+                      <ThumbsUp className="w-4 h-4" />
+                      <span className="text-[11px] font-medium">{post.likes}</span>
+                    </button>
+                    <button className="flex items-center gap-1 hover:text-rose-600">
+                      <ThumbsDown className="w-4 h-4" />
+                      <span className="text-[11px] font-medium">{post.dislikes}</span>
+                    </button>
+                    <button className="hover:text-blue-600">
+                      <Share className="w-4 h-4" />
+                    </button>
+                    <button className="hover:text-amber-600">
+                      <DollarSign className="w-4 h-4" />
+                    </button>
+                    <button className="flex items-center gap-1 hover:text-emerald-600">
+                      <MessageCircle className="w-4 h-4" />
+                      <span className="text-[11px] font-medium">{post.comments}</span>
+                    </button>
+                  </div>
+                </div>
+              ))}
+          </div>
         </div>
       )}
 
-      {activeTab === 'ORDERBOOK' && (
-        <div className="pb-24 bg-white">
-          {/* Orderbook Summary */}
-          <div className="grid grid-cols-2 gap-x-4 gap-y-3 px-4 py-5 text-[12px] border-b border-gray-100">
-            <div className="flex justify-between">
-              <span className="text-gray-500">Open</span>
-              <span className="font-medium text-[#00B26A]">97</span>
+      {/* TAB CONTENT: KEYSTATS */}
+      {activeTab === 'KEYSTATS' && (
+        <div className="p-4 pb-24 bg-white">
+          <h3 className="text-[14px] font-bold text-gray-900 mb-3">Statistik Kunci {displaySymbol}</h3>
+          
+          <div className="grid grid-cols-2 gap-3 text-[12px]">
+            <div className="p-3 bg-gray-50 rounded-lg border border-gray-100">
+              <span className="text-gray-500 block text-[11px] mb-1">24h Tertinggi</span>
+              <span className="font-bold text-gray-900">{assetData.high}</span>
             </div>
-            <div className="flex justify-between">
-              <span className="text-gray-500">Lot</span>
-              <span className="font-medium text-gray-900">64.89K</span>
+            <div className="p-3 bg-gray-50 rounded-lg border border-gray-100">
+              <span className="text-gray-500 block text-[11px] mb-1">24h Terendah</span>
+              <span className="font-bold text-gray-900">{assetData.low}</span>
             </div>
-            <div className="flex justify-between">
-              <span className="text-gray-500">High</span>
-              <span className="font-medium text-[#00B26A]">98</span>
+            <div className="p-3 bg-gray-50 rounded-lg border border-gray-100">
+              <span className="text-gray-500 block text-[11px] mb-1">Volume 24h</span>
+              <span className="font-bold text-gray-900">{assetData.volume}</span>
             </div>
-            <div className="flex justify-between">
-              <span className="text-gray-500">Val</span>
-              <span className="font-medium text-gray-900">628.23M</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-500">Low</span>
-              <span className="font-medium text-[#e11d48]">95</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-500">Avg</span>
-              <span className="font-medium text-gray-900">97</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-gray-500">ARA</span>
-              <span className="font-medium text-gray-900 flex items-center gap-1">129 <ChevronDown className="w-3.5 h-3.5 text-gray-400" /></span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-gray-500">ARB</span>
-              <span className="font-medium text-gray-900 flex items-center gap-1">82 <ChevronDown className="w-3.5 h-3.5 text-gray-400" /></span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-500">F Buy</span>
-              <span className="font-medium text-[#00B26A]">77.60K</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-500">F Sell</span>
-              <span className="font-medium text-[#e11d48]">2.02M</span>
+            <div className="p-3 bg-gray-50 rounded-lg border border-gray-100">
+              <span className="text-gray-500 block text-[11px] mb-1">Kapitalisasi Pasar</span>
+              <span className="font-bold text-gray-900">
+                {displaySymbol === 'BTC' ? '$1.82 Triliun' : displaySymbol === 'ETH' ? '$320 Miliar' : '$45 Miliar'}
+              </span>
             </div>
           </div>
+        </div>
+      )}
 
-          {/* Orderbook Table */}
-          <div className="w-full pb-6">
-            <div className="grid grid-cols-[1fr_2fr_1.5fr_1.5fr_2fr_1fr] gap-1 px-1 py-3 text-[11px] font-bold text-gray-900 border-b border-gray-100 text-center">
-              <div className="text-left pl-3">Freq</div>
-              <div className="text-right pr-2">Lot</div>
-              <div>Bid</div>
-              <div>Ask</div>
-              <div className="text-left pl-2">Lot</div>
-              <div className="text-right pr-3">Freq</div>
-            </div>
-            
-            {Array.from({ length: 10 }).map((_, i) => {
-               const bid = orderBook.bids[i] || { price: '-', qty: '-' };
-               const ask = orderBook.asks[i] || { price: '-', qty: '-' };
-               
-               // Mock realistic lot rendering for UI matching
-               const bidQtyRaw = bid.qty !== '-' ? parseFloat(bid.qty) : 0;
-               const askQtyRaw = ask.qty !== '-' ? parseFloat(ask.qty) : 0;
-               const maxLot = 5; // Normalize for visual
-               const bidWidth = bid.qty !== '-' ? Math.min(100, (bidQtyRaw / maxLot) * 100) : 0;
-               const askWidth = ask.qty !== '-' ? Math.min(100, (askQtyRaw / maxLot) * 100) : 0;
-               
-               const formatLot = (val: string) => {
-                 if (val === '-') return '-';
-                 const v = parseFloat(val);
-                 return (v * 1000).toLocaleString('en-US', { maximumFractionDigits: 0 }); // Just for display
-               };
+      {/* TAB CONTENT: ORDERBOOK */}
+      {activeTab === 'ORDERBOOK' && (
+        <div className="pb-24 bg-white">
+          <div className="grid grid-cols-[1fr_2fr_1.5fr_1.5fr_2fr_1fr] gap-1 px-3 py-3 text-[11px] font-bold text-gray-900 border-b border-gray-100 text-center bg-gray-50/50">
+            <div className="text-left">Freq</div>
+            <div className="text-right pr-2">Lot/Qty</div>
+            <div>Bid</div>
+            <div>Ask</div>
+            <div className="text-left pl-2">Lot/Qty</div>
+            <div className="text-right">Freq</div>
+          </div>
 
-               return (
-                 <div key={i} className="grid grid-cols-[1fr_2fr_1.5fr_1.5fr_2fr_1fr] gap-1 px-1 py-2 text-[11px] border-b border-gray-50 text-center items-center">
-                   <div className="text-left pl-3 text-[#a855f7] font-medium">{bid.qty !== '-' ? Math.floor(Math.random() * 80) + 10 : '-'}</div>
-                   <div className="text-right pr-2 relative h-5 flex items-center justify-end">
-                     <div className="absolute right-0 top-0 bottom-0 bg-[#ffe4e6] rounded-sm transition-all duration-300" style={{ width: `${bidWidth}%` }}></div>
-                     <span className="relative z-10 text-gray-800 font-medium">{formatLot(bid.qty)}</span>
-                   </div>
-                   <div className={cn("font-medium", bid.price === '-' ? "text-gray-400" : "text-[#e11d48]")}>{bid.price}</div>
-                   
-                   <div className={cn("font-medium", ask.price === '-' ? "text-gray-400" : "text-[#00B26A]")}>{ask.price}</div>
-                   <div className="text-left pl-2 relative h-5 flex items-center justify-start">
-                     <div className="absolute left-0 top-0 bottom-0 bg-[#dcfce7] rounded-sm transition-all duration-300" style={{ width: `${askWidth}%` }}></div>
-                     <span className="relative z-10 text-gray-800 font-medium">{formatLot(ask.qty)}</span>
-                   </div>
-                   <div className="text-right pr-3 text-[#a855f7] font-medium">{ask.qty !== '-' ? Math.floor(Math.random() * 80) + 10 : '-'}</div>
-                 </div>
-               )
+          <div className="divide-y divide-gray-50">
+            {Array.from({ length: 5 }).map((_, i) => {
+              const bid = orderBook.bids[i] || { price: '-', qty: '-' };
+              const ask = orderBook.asks[i] || { price: '-', qty: '-' };
+              return (
+                <div key={i} className="grid grid-cols-[1fr_2fr_1.5fr_1.5fr_2fr_1fr] gap-1 px-3 py-2.5 text-[11px] text-center items-center">
+                  <div className="text-left text-purple-600 font-medium">{bid.qty !== '-' ? Math.floor(Math.random() * 40) + 10 : '-'}</div>
+                  <div className="text-right pr-2 font-semibold text-gray-800">{bid.qty}</div>
+                  <div className="font-bold text-[#e11d48]">{bid.price}</div>
+                  <div className="font-bold text-[#00B26A]">{ask.price}</div>
+                  <div className="text-left pl-2 font-semibold text-gray-800">{ask.qty}</div>
+                  <div className="text-right text-purple-600 font-medium">{ask.qty !== '-' ? Math.floor(Math.random() * 40) + 10 : '-'}</div>
+                </div>
+              );
             })}
           </div>
         </div>
       )}
 
+      {/* TAB CONTENT: ANALISIS */}
       {activeTab === 'ANALISIS' && (
-         <div className="pb-24 bg-white">
-            <div className="px-4 py-5">
-               <div className="flex items-center gap-2 mb-5">
-                  <div className="flex items-center justify-between border border-gray-200 rounded-lg px-3 py-2 cursor-pointer w-40 hover:bg-gray-50">
-                     <span className="text-[13px] font-bold text-gray-900 mr-2">PE Band (TTM)</span>
-                     <ChevronDown className="w-4 h-4 text-gray-500" />
-                  </div>
-                  <Info className="w-5 h-5 text-gray-400" strokeWidth={2} />
-               </div>
-               
-               <div className="flex items-center gap-3 mb-8">
-                  <button className="px-4 py-1.5 rounded-full border border-[#00B26A] text-[#00B26A] text-[12px] font-bold bg-[#f0fdf4]">3 Tahun</button>
-                  <button className="px-4 py-1.5 rounded-full border border-gray-200 text-gray-500 text-[12px] font-medium hover:bg-gray-50">5 Tahun</button>
-                  <button className="px-4 py-1.5 rounded-full border border-gray-200 text-gray-500 text-[12px] font-medium hover:bg-gray-50">10 Tahun</button>
-               </div>
-               
-               {/* Chart Mock */}
-               <div className="h-[220px] w-full relative mb-8 pr-12">
-                  <div className="absolute inset-0 pb-6 pr-12">
-                     {/* Horizontal grid lines */}
-                     <div className="absolute w-full flex items-center top-[10%]">
-                       <div className="w-full h-[1px] bg-[#f472b6]"></div>
-                       <span className="absolute -right-[36px] text-[10px] text-[#f472b6] font-bold">192.4</span>
-                     </div>
-                     <div className="absolute w-full flex items-center top-[25%]">
-                       <div className="w-full h-[1px] bg-[#fb923c]"></div>
-                       <span className="absolute -right-[36px] text-[10px] text-[#fb923c] font-bold">115.53</span>
-                     </div>
-                     <div className="absolute w-full flex items-center top-[40%]">
-                       <div className="w-full h-[1px] bg-[#22c55e]"></div>
-                       <span className="absolute -right-[36px] text-[10px] text-gray-900 font-bold bg-white z-10 px-0.5">38.66</span>
-                     </div>
-                     <div className="absolute w-full flex items-center top-[55%]">
-                       <div className="w-full h-[1px] bg-[#ef4444]"></div>
-                       <span className="absolute -right-[36px] text-[10px] text-[#ef4444] font-bold">-38.21</span>
-                     </div>
-                     <div className="absolute w-full flex items-center top-[70%]">
-                       <div className="w-full h-[1px] bg-[#3b82f6]"></div>
-                       <span className="absolute -right-[36px] text-[10px] text-[#3b82f6] font-bold bg-gray-900 px-1 rounded-sm text-white z-10">-115.07</span>
-                     </div>
-                     
-                     <div className="absolute w-full h-[1px] bg-gray-200 top-[85%] border-t border-dashed"></div>
-
-                     {/* Vertical crosshair */}
-                     <div className="absolute w-[1px] h-full bg-gray-800 left-[45%]"></div>
-                     <div className="absolute w-3 h-3 rounded-full border-2 border-gray-900 bg-white left-[45%] top-[55%] transform -translate-x-[5px] -translate-y-1.5 z-20"></div>
-
-                     {/* Data line */}
-                     <svg className="absolute inset-0 w-full h-full" preserveAspectRatio="none">
-                        <polyline points="0,55 50,55 80,60 90,85 100,75 110,95 130,55 150,58 180,56 195,55 200,10 205,58 240,55 300,58" fill="none" stroke="#2563eb" strokeWidth="1.5" />
-                     </svg>
-                     <div className="absolute left-[45%] bottom-[-8px] transform -translate-x-1/2 bg-gray-900 text-white text-[11px] font-medium px-3 py-1 rounded">03 Jan 25</div>
-                     
-                     <div className="absolute right-[-24px] top-[55%] transform -translate-y-1.5 z-20 bg-gray-900 px-1 rounded-sm text-white text-[10px] font-bold">5.33</div>
-                     <div className="absolute w-2.5 h-2.5 rounded-full bg-gray-900 right-[-5px] top-[55%] transform -translate-y-[5px] z-30"></div>
-                  </div>
-                  
-                  {/* Y Axis upper labels */}
-                  <div className="absolute right-0 top-0 bottom-6 flex flex-col justify-between text-[9px] text-gray-300 items-end">
-                    <span>750</span>
-                    <span>500</span>
-                    <span>250</span>
-                    <span>0</span>
-                    <span>-250</span>
-                    <span>-500</span>
-                  </div>
-                  
-                  {/* X Axis labels */}
-                  <div className="absolute bottom-0 w-full pr-8 flex justify-between text-[11px] text-gray-400 px-8">
-                     <span>2024</span>
-                     <span>2026</span>
-                  </div>
-               </div>
-               
-               {/* Legend Table */}
-               <div className="text-[10px] mt-2 mb-4 px-2">
-                  <div className="flex justify-between py-0.5">
-                     <div className="flex items-center gap-2 w-[160px]"><div className="w-2 h-2 bg-[#3b82f6]"></div><span className="text-gray-500">Current PE Ratio (TTM)</span></div>
-                     <span className="text-gray-500 w-[100px] text-center">03 Jan 2025</span>
-                     <span className="text-gray-900 text-right w-[60px]">-54.75</span>
-                  </div>
-                  <div className="flex justify-between py-0.5">
-                     <div className="flex items-center gap-2 w-[160px]"><div className="w-2 h-2 bg-[#f472b6]"></div><span className="text-gray-500">+2 PE Standard Deviation</span></div>
-                     <span className="text-gray-500 w-[100px] text-center">10 Aug 2026</span>
-                     <span className="text-gray-900 text-right w-[60px]">192.4</span>
-                  </div>
-                  <div className="flex justify-between py-0.5">
-                     <div className="flex items-center gap-2 w-[160px]"><div className="w-2 h-2 bg-[#fb923c]"></div><span className="text-gray-500">+1 PE Standard Deviation</span></div>
-                     <span className="text-gray-500 w-[100px] text-center">10 Aug 2026</span>
-                     <span className="text-gray-900 text-right w-[60px]">115.53</span>
-                  </div>
-                  <div className="flex justify-between py-0.5">
-                     <div className="flex items-center gap-2 w-[160px]"><div className="w-2 h-2 bg-[#22c55e]"></div><span className="text-gray-500">Mean PE Standard Deviation</span></div>
-                     <span className="text-gray-500 w-[100px] text-center">10 Aug 2026</span>
-                     <span className="text-gray-900 text-right w-[60px]">38.66</span>
-                  </div>
-                  <div className="flex justify-between py-0.5">
-                     <div className="flex items-center gap-2 w-[160px]"><div className="w-2 h-2 bg-[#ef4444]"></div><span className="text-gray-500">-1 PE Standard Deviation</span></div>
-                     <span className="text-gray-500 w-[100px] text-center">10 Aug 2026</span>
-                     <span className="text-gray-900 text-right w-[60px]">-38.21</span>
-                  </div>
-                  <div className="flex justify-between py-0.5">
-                     <div className="flex items-center gap-2 w-[160px]"><div className="w-2 h-2 bg-[#3b82f6]"></div><span className="text-gray-500">-2 PE Standard Deviation</span></div>
-                     <span className="text-gray-500 w-[100px] text-center">10 Aug 2026</span>
-                     <span className="text-gray-900 text-right w-[60px]">-115.07</span>
-                  </div>
-               </div>
-
-               {/* PBV Band Section */}
-               <div className="mt-8 pt-8 border-t border-gray-50">
-                  <div className="flex items-center gap-2 mb-5">
-                     <span className="text-[14px] font-bold text-gray-900">PBV Band</span>
-                     <Info className="w-4 h-4 text-gray-400" strokeWidth={2} />
-                  </div>
-                  
-                  <div className="flex items-center gap-3 mb-8">
-                     <button className="px-4 py-1.5 rounded-full border border-[#00B26A] text-[#00B26A] text-[12px] font-bold bg-[#f0fdf4]">3 Tahun</button>
-                     <button className="px-4 py-1.5 rounded-full border border-gray-200 text-gray-500 text-[12px] font-medium hover:bg-gray-50">5 Tahun</button>
-                     <button className="px-4 py-1.5 rounded-full border border-gray-200 text-gray-500 text-[12px] font-medium hover:bg-gray-50">10 Tahun</button>
-                  </div>
-                  
-                  {/* PBV Chart Mock */}
-                  <div className="h-[220px] w-full relative mb-8 pr-12">
-                     <div className="absolute inset-0 pb-6 pr-12">
-                        {/* Horizontal grid lines */}
-                        <div className="absolute w-full flex items-center top-[10%]">
-                          <div className="w-full h-[1px] bg-[#f472b6]"></div>
-                          <span className="absolute -right-[32px] text-[10px] text-[#f472b6] font-bold">8.49</span>
-                        </div>
-                        <div className="absolute w-full flex items-center top-[30%]">
-                          <div className="w-full h-[1px] bg-[#fb923c]"></div>
-                          <span className="absolute -right-[32px] text-[10px] text-[#fb923c] font-bold">5.87</span>
-                        </div>
-                        <div className="absolute w-full flex items-center top-[50%]">
-                          <div className="w-full h-[1px] bg-[#22c55e]"></div>
-                          <span className="absolute -right-[32px] text-[10px] text-[#22c55e] font-bold">3.24</span>
-                        </div>
-                        <div className="absolute w-full flex items-center top-[70%]">
-                          <div className="w-full h-[1px] bg-[#ef4444]"></div>
-                          <span className="absolute -right-[32px] text-[10px] text-[#ef4444] font-bold">1.53</span>
-                        </div>
-                        <div className="absolute w-full flex items-center top-[90%]">
-                          <div className="w-full h-[1px] bg-[#3b82f6]"></div>
-                          <span className="absolute -right-[32px] text-[10px] text-[#3b82f6] font-bold">-2.01</span>
-                        </div>
-                        
-                        {/* Data line */}
-                        <svg className="absolute inset-0 w-full h-full" preserveAspectRatio="none">
-                           <polyline points="0,85 40,85 50,75 55,70 60,80 65,65 70,10 75,30 80,15 85,25 90,40 100,50 110,45 120,60 130,55 140,80 150,75 160,80 170,75 180,75 190,55 220,55 230,80 240,85 260,85 280,88 290,85 300,88" fill="none" stroke="#2563eb" strokeWidth="1.5" />
-                        </svg>
-                     </div>
-                     
-                     {/* Y Axis upper labels */}
-                     <div className="absolute right-0 top-0 bottom-6 flex flex-col justify-between text-[9px] text-gray-300 items-end">
-                       <span>15</span>
-                       <span>10</span>
-                       <span>5</span>
-                       <span>0</span>
-                       <span>-5</span>
-                     </div>
-                     
-                     {/* X Axis labels */}
-                     <div className="absolute bottom-0 w-full pr-8 flex justify-between text-[11px] text-gray-400 px-8">
-                        <span>2024</span>
-                        <span>2025</span>
-                        <span>2026</span>
-                     </div>
-                  </div>
-               </div>
+        <div className="p-4 pb-24 bg-white">
+          <h3 className="text-[14px] font-bold text-gray-900 mb-3">Sinyal Teknis & Sentimen</h3>
+          <div className="p-4 bg-emerald-50/40 border border-emerald-200 rounded-xl mb-4">
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-xs font-bold text-gray-700">Sentimen Pasar</span>
+              <span className="text-xs font-bold text-[#00B26A] bg-white px-2 py-0.5 rounded border border-emerald-300">BULLISH</span>
             </div>
-         </div>
+            <p className="text-[12px] text-gray-600">
+              84% indikator teknikal menunjukkan sinyal tren naik untuk {displaySymbol}.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* TAB CONTENT: FINANSIAL */}
+      {activeTab === 'FINANSIAL' && (
+        <div className="p-4 pb-24 bg-white text-[12px]">
+          <h3 className="text-[14px] font-bold text-gray-900 mb-3">Metrik Finansial {displaySymbol}</h3>
+          <div className="space-y-2">
+            <div className="flex justify-between py-2 border-b border-gray-100">
+              <span className="text-gray-500">Pasokan Beredar</span>
+              <span className="font-bold text-gray-900">{displaySymbol === 'BTC' ? '19.7M BTC' : '120.2M Token'}</span>
+            </div>
+            <div className="flex justify-between py-2 border-b border-gray-100">
+              <span className="text-gray-500">Maksimum Pasokan</span>
+              <span className="font-bold text-gray-900">{displaySymbol === 'BTC' ? '21.0M BTC' : 'Tak Terbatas'}</span>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

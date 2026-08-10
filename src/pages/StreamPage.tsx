@@ -13,7 +13,8 @@ export function StreamPage({ onOpenProfile }: { onOpenProfile?: () => void }) {
         <button onClick={onOpenProfile} className="h-8 w-8 overflow-hidden rounded-full bg-blue-100 flex items-center justify-center relative z-10">
           <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Garuda" alt="Avatar" className="h-full w-full object-cover" />
         </button>
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none gap-2">
+          <img src="/logo.jpg" alt="Garuda Invest" className="w-6 h-6 rounded object-cover shadow-sm" />
           <span className="text-xl font-bold tracking-tight text-secondary">GARUDA<span className="text-primary">INVEST</span></span>
         </div>
         <div className="flex items-center gap-4 text-gray-500 relative z-10">

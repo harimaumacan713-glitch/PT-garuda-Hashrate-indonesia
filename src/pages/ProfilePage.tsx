@@ -1,15 +1,16 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   ChevronLeft, ArrowUpCircle, ArrowDownCircle, History, Copy, 
   User, Landmark, FileText, Fingerprint, Lock, Smartphone, 
   Link as LinkIcon, Snowflake, FileBadge, ArrowRightLeft, Mail, 
   Users, UserPlus, Wallet, Key, Moon, Bell, Globe, ShieldCheck, 
   Headphones, Stethoscope, Trash2, HelpCircle, Star, FileSignature, 
-  RefreshCw, LogOut, ChevronRight
+  RefreshCw, LogOut, ChevronRight, X
 } from 'lucide-react';
 import { cn } from '../lib/utils';
-import { auth } from '../lib/firebase';
+import { auth, db } from '../lib/firebase';
 import { signOut } from 'firebase/auth';
+import { ref, onValue, set, runTransaction, push, serverTimestamp, get } from 'firebase/database';
 import { useAuth } from '../contexts/AuthContext';
 import { WithdrawPage } from './WithdrawPage';
 
@@ -20,6 +21,91 @@ type ProfilePageProps = {
 export function ProfilePage({ onClose }: ProfilePageProps) {
   const { user } = useAuth();
   const [showWithdraw, setShowWithdraw] = useState(false);
+  const [balance, setBalance] = useState<number>(0);
+  const [depositMsg, setDepositMsg] = useState<string | null>(null);
+  
+  // Transaction History Modal state
+  const [showHistory, setShowHistory] = useState(false);
+  const [transactions, setTransactions] = useState<any[]>([]);
+
+  // Bank account state
+  const [bankAccount, setBankAccount] = useState({
+    bankName: 'JAGO',
+    accountNumber: '103653847791',
+    accountHolder: 'INVESTOR'
+  });
+  const [showBankModal, setShowBankModal] = useState(false);
+
+  useEffect(() => {
+    if (user) {
+      // 1. Balance
+      const balanceRef = ref(db, `users/${user.uid}/balance`);
+      const unsubscribe = onValue(balanceRef, (snapshot) => {
+        if (snapshot.exists()) {
+          setBalance(snapshot.val());
+        } else {
+          const initialBalance = 10000000;
+          set(balanceRef, initialBalance).catch(console.error);
+        }
+      });
+
+      // 2. Bank Account
+      const bankRef = ref(db, `users/${user.uid}/bankAccount`);
+      get(bankRef).then((snapshot) => {
+        if (snapshot.exists()) {
+          setBankAccount(snapshot.val());
+        }
+      }).catch(console.error);
+
+      return () => unsubscribe();
+    }
+  }, [user]);
+
+  // Load transaction history for logged in user
+  useEffect(() => {
+    if (user && showHistory) {
+      const txRef = ref(db, `users/${user.uid}/transactions`);
+      get(txRef).then((snapshot) => {
+        if (snapshot.exists()) {
+          const data = snapshot.val();
+          const list = Object.values(data).sort((a: any, b: any) => (b.timestamp || b.createdAt || 0) - (a.timestamp || a.createdAt || 0));
+          setTransactions(list);
+        } else {
+          setTransactions([]);
+        }
+      }).catch(console.error);
+    }
+  }, [user, showHistory]);
+
+  const handleDeposit = async () => {
+    if (!user) return;
+    try {
+      const userBalanceRef = ref(db, `users/${user.uid}/balance`);
+      await runTransaction(userBalanceRef, (currentBalance) => {
+        return (currentBalance || 0) + 100000;
+      });
+
+      const transactionsRef = ref(db, `users/${user.uid}/transactions`);
+      const newTxRef = push(transactionsRef);
+      await set(newTxRef, {
+        userId: user.uid,
+        uid: user.uid,
+        transactionId: newTxRef.key,
+        type: "deposit",
+        source: "external",
+        destination: "garuda_inves",
+        amount: 100000,
+        status: "completed",
+        createdAt: serverTimestamp(),
+        timestamp: Date.now()
+      });
+
+      setDepositMsg("+ Rp100.000 berhasil ditambahkan");
+      setTimeout(() => setDepositMsg(null), 3000);
+    } catch (e) {
+      console.error(e);
+    }
+  };
   
   const handleLogout = async () => {
     try {
@@ -29,6 +115,8 @@ export function ProfilePage({ onClose }: ProfilePageProps) {
       console.error('Logout failed', error);
     }
   };
+
+  const userNameDisplay = user?.displayName || user?.email?.split('@')[0] || 'Investor';
 
   if (showWithdraw) {
     return <WithdrawPage onBack={() => setShowWithdraw(false)} />;
@@ -70,38 +158,48 @@ export function ProfilePage({ onClose }: ProfilePageProps) {
       <div className="flex-1 overflow-y-auto no-scrollbar pb-10">
         {/* Profile Info */}
         <div className="flex flex-col items-center pt-2 pb-6">
-          <div className="h-[64px] w-[64px] overflow-hidden rounded-full bg-blue-100 mb-3 shadow-sm border border-gray-100">
-            <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Garuda" alt="Avatar" className="h-full w-full object-cover" />
+          <div className="h-[64px] w-[64px] overflow-hidden rounded-full bg-blue-100 mb-3 shadow-sm border border-gray-100 flex items-center justify-center">
+            <span className="text-2xl font-bold text-primary">
+              {userNameDisplay.substring(0, 1).toUpperCase()}
+            </span>
           </div>
-          <h2 className="text-[15px] font-bold text-secondary mb-0.5">{user?.email || 'DewanggaTreders'}</h2>
-          <button className="text-[11px] text-primary font-medium hover:underline">Lihat Profil</button>
+          <h2 className="text-[15px] font-bold text-secondary mb-0.5">{userNameDisplay}</h2>
+          <p className="text-[11px] text-gray-500">{user?.email}</p>
         </div>
 
         {/* Balance Info */}
         <div className="grid grid-cols-2 px-8 mb-6">
           <div className="text-center">
             <p className="text-[10px] text-gray-400 mb-0.5">Total Trading Balance</p>
-            <p className="text-[12px] font-bold text-secondary">Rp0</p>
+            <p className="text-[12px] font-bold text-secondary">Rp{balance.toLocaleString('en-US')}</p>
           </div>
           <div className="text-center">
             <p className="text-[10px] text-gray-400 mb-0.5">Total Equity</p>
-            <p className="text-[12px] font-bold text-secondary">Rp0</p>
+            <p className="text-[12px] font-bold text-secondary">Rp{balance.toLocaleString('en-US')}</p>
           </div>
         </div>
+
+        {depositMsg && (
+          <div className="px-4 mb-3 text-center">
+            <span className="bg-green-100 text-[#00B26A] text-[11px] font-bold px-3 py-1 rounded-full animate-fade-in">
+              {depositMsg}
+            </span>
+          </div>
+        )}
 
         {/* Action Cards */}
         <div className="px-4 mb-4">
           <div className="rounded-xl border border-gray-100 shadow-sm overflow-hidden bg-white">
             <div className="grid grid-cols-3 border-b border-gray-100">
-              <button className="flex flex-col items-center justify-center py-4 hover:bg-gray-50">
+              <button onClick={handleDeposit} className="flex flex-col items-center justify-center py-4 hover:bg-gray-50 transition-colors">
                 <ArrowUpCircle className="h-6 w-6 text-primary mb-1.5" strokeWidth={1.5} />
-                <span className="text-[11px] font-bold text-secondary">Deposit</span>
+                <span className="text-[11px] font-bold text-secondary">Deposit (+100rb)</span>
               </button>
               <button onClick={() => setShowWithdraw(true)} className="flex flex-col items-center justify-center py-4 hover:bg-gray-50 border-x border-gray-100">
                 <ArrowDownCircle className="h-6 w-6 text-primary mb-1.5" strokeWidth={1.5} />
                 <span className="text-[11px] font-bold text-secondary">Withdraw</span>
               </button>
-              <button className="flex flex-col items-center justify-center py-4 hover:bg-gray-50">
+              <button onClick={() => setShowHistory(true)} className="flex flex-col items-center justify-center py-4 hover:bg-gray-50">
                 <History className="h-6 w-6 text-primary mb-1.5" strokeWidth={1.5} />
                 <span className="text-[11px] font-bold text-secondary">Riwayat</span>
               </button>
@@ -109,20 +207,95 @@ export function ProfilePage({ onClose }: ProfilePageProps) {
             <div className="flex items-center justify-between p-3 bg-gray-50/50">
               <div className="flex items-center gap-3">
                 <div className="flex h-9 w-9 items-center justify-center rounded-full bg-orange-400 text-white text-lg font-bold">
-                  J
+                  {bankAccount.bankName?.substring(0, 1) || 'J'}
                 </div>
                 <div>
-                  <p className="text-[10px] text-gray-400 leading-tight">RDN</p>
-                  <p className="text-[11px] text-secondary leading-tight">Dewangga</p>
-                  <p className="text-[12px] font-bold text-secondary leading-tight">110245815557</p>
+                  <p className="text-[10px] text-gray-400 leading-tight">RDN / Rekening ({bankAccount.bankName})</p>
+                  <p className="text-[11px] text-secondary leading-tight uppercase">{bankAccount.accountHolder}</p>
+                  <p className="text-[12px] font-bold text-secondary leading-tight">{bankAccount.accountNumber}</p>
                 </div>
               </div>
-              <button className="p-2 text-primary hover:bg-green-50 rounded-full">
+              <button 
+                onClick={() => {
+                  navigator.clipboard.writeText(bankAccount.accountNumber);
+                  alert('Nomor rekening telah disalin!');
+                }}
+                className="p-2 text-primary hover:bg-green-50 rounded-full"
+              >
                 <Copy className="h-4 w-4" strokeWidth={2} />
               </button>
             </div>
           </div>
         </div>
+
+        {/* Modal Riwayat Transaksi */}
+        {showHistory && (
+          <div className="fixed inset-0 z-[80] bg-black/50 flex flex-col justify-end">
+            <div className="bg-white rounded-t-2xl w-full max-h-[85vh] flex flex-col p-4">
+              <div className="flex items-center justify-between pb-3 border-b border-gray-100">
+                <h3 className="text-base font-bold text-gray-900">Riwayat Transaksi Saya</h3>
+                <button onClick={() => setShowHistory(false)} className="p-1 text-gray-400 hover:text-gray-700">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto py-3 space-y-3 no-scrollbar">
+                {transactions.length === 0 ? (
+                  <p className="text-center py-8 text-xs text-gray-400">Belum ada riwayat transaksi</p>
+                ) : (
+                  transactions.map((tx, idx) => {
+                    const isP2Transfer = tx.destination === 'jago' || tx.destinationProject === 'project2' || tx.type === 'withdraw_project2';
+                    const isBuyOrWd = tx.type === 'buy' || tx.type === 'withdraw' || tx.type === 'withdraw_project2';
+                    return (
+                      <div key={tx.transactionId || idx} className="p-3 border border-gray-100 rounded-lg flex items-center justify-between bg-gray-50/50 text-xs gap-2">
+                        <div className="space-y-1 flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className={cn(
+                              "px-2 py-0.5 rounded font-bold uppercase text-[9px] tracking-wide",
+                              tx.type === 'buy' ? "bg-blue-100 text-blue-700" :
+                              tx.type === 'sell' ? "bg-green-100 text-green-700" :
+                              tx.type === 'deposit' ? "bg-emerald-100 text-emerald-700" :
+                              isP2Transfer ? "bg-emerald-100 text-[#00B26A]" : "bg-orange-100 text-orange-700"
+                            )}>
+                              {isP2Transfer ? 'Transfer ke Project 2' : tx.type}
+                            </span>
+                            <span className="font-bold text-gray-900 truncate">
+                              {isP2Transfer ? 'Project 2 (Akun Saya)' : (tx.asset || tx.symbol || tx.source || 'Sistem')}
+                            </span>
+                          </div>
+                          {tx.transactionId && (
+                            <p className="text-[10px] font-mono text-gray-500 truncate">
+                              ID: {tx.transactionId}
+                            </p>
+                          )}
+                          {tx.lot && <p className="text-gray-500 text-[11px]">{tx.lot} lot @ Rp{tx.price?.toLocaleString()}</p>}
+                          {tx.pnl !== undefined && (
+                            <p className={cn("text-[11px] font-medium", tx.pnl >= 0 ? "text-green-600" : "text-red-500")}>
+                              PnL: {tx.pnl >= 0 ? '+' : ''}Rp{tx.pnl?.toLocaleString()} ({tx.pnlPercent}%)
+                            </p>
+                          )}
+                          <p className="text-[10px] text-gray-400">
+                            {tx.timestamp ? new Date(tx.timestamp).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' }) : 'Selesai'}
+                          </p>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <span className={cn(
+                            "font-bold text-sm block",
+                            isBuyOrWd ? "text-gray-900" : "text-[#00B26A]"
+                          )}>
+                            {isBuyOrWd ? '-' : '+'}Rp{(tx.amount || tx.total || 0).toLocaleString('en-US')}
+                          </span>
+                          <span className="inline-block mt-0.5 text-[10px] text-emerald-600 font-bold uppercase px-1.5 py-0.2 rounded bg-emerald-50">
+                            {tx.status || 'Completed'}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Update Banner */}
         <div className="px-4 mb-4">
@@ -140,7 +313,7 @@ export function ProfilePage({ onClose }: ProfilePageProps) {
         <div className="bg-white">
           <SectionTitle title="Akun" />
           <MenuItem icon={User} title="Akun" />
-          <MenuItem icon={Landmark} title="Rekening Bank" />
+          <MenuItem icon={Landmark} title="Rekening Bank" onClick={() => setShowWithdraw(true)} />
           <MenuItem icon={FileText} title="E-Statement" />
 
           <SectionTitle title="Keamanan" />
@@ -186,7 +359,6 @@ export function ProfilePage({ onClose }: ProfilePageProps) {
           <MenuItem icon={FileSignature} title="Kebijakan Privasi" />
 
           <SectionTitle title="Login" />
-          <MenuItem icon={RefreshCw} title="Pindah ke Virtual" />
           <MenuItem icon={LogOut} title="Keluar" onClick={handleLogout} />
         </div>
 

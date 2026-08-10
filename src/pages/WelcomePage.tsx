@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Activity } from 'lucide-react';
 import { auth, googleProvider } from '../lib/firebase';
-import { signInWithEmailAndPassword, signInWithPopup } from 'firebase/auth';
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signInWithPopup } from 'firebase/auth';
 import { cn } from '../lib/utils';
 
 interface WelcomePageProps {
@@ -15,6 +15,17 @@ export function WelcomePage({ onLogin }: WelcomePageProps) {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
+  const formatAuthError = (err: any) => {
+    const msg = err.message || '';
+    if (msg.includes('auth/email-already-in-use')) return 'Email ini sudah terdaftar. Silakan masuk.';
+    if (msg.includes('auth/invalid-email')) return 'Format email tidak valid.';
+    if (msg.includes('auth/weak-password')) return 'Password terlalu lemah, minimal 6 karakter.';
+    if (msg.includes('auth/wrong-password') || msg.includes('auth/user-not-found') || msg.includes('auth/invalid-credential')) {
+      return 'Email atau password salah.';
+    }
+    return msg || 'Gagal melakukan autentikasi';
+  };
+
   const handleEmailLogin = async () => {
     try {
       setLoading(true);
@@ -22,7 +33,20 @@ export function WelcomePage({ onLogin }: WelcomePageProps) {
       await signInWithEmailAndPassword(auth, email, password);
       onLogin();
     } catch (err: any) {
-      setError(err.message || 'Authentication failed');
+      setError(formatAuthError(err));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleEmailRegister = async () => {
+    try {
+      setLoading(true);
+      setError('');
+      await createUserWithEmailAndPassword(auth, email, password);
+      onLogin();
+    } catch (err: any) {
+      setError(formatAuthError(err));
     } finally {
       setLoading(false);
     }
@@ -35,7 +59,7 @@ export function WelcomePage({ onLogin }: WelcomePageProps) {
       await signInWithPopup(auth, googleProvider);
       onLogin();
     } catch (err: any) {
-      setError(err.message || 'Google sign-in failed');
+      setError(formatAuthError(err));
     } finally {
       setLoading(false);
     }
@@ -99,11 +123,14 @@ export function WelcomePage({ onLogin }: WelcomePageProps) {
 
   if (view === 'register') {
     return (
-      <div className="flex flex-col h-full bg-white px-6 pt-12 pb-6">
-        <div className="flex items-center gap-2 mb-10">
+      <div className="flex flex-col h-full bg-white px-6 pt-12 pb-6 overflow-y-auto no-scrollbar">
+        <div className="flex items-center gap-2 mb-8">
           <button 
-            onClick={() => setView('welcome')}
-            className="text-gray-500 hover:text-gray-900 font-medium"
+            onClick={() => {
+              setError('');
+              setView('welcome');
+            }}
+            className="text-gray-500 hover:text-gray-900 font-medium text-sm"
           >
             ← Kembali
           </button>
@@ -111,18 +138,55 @@ export function WelcomePage({ onLogin }: WelcomePageProps) {
         <h1 className="text-2xl font-bold text-gray-900 mb-2">
           Daftar Akun Baru
         </h1>
-        <p className="text-sm text-gray-500 mb-8">
-          Daftar dengan cepat menggunakan akun Google Anda.
+        <p className="text-sm text-gray-500 mb-6">
+          Buat akun baru untuk mulai berinvestasi.
         </p>
 
+        <div className="space-y-4 mb-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary text-sm"
+              placeholder="nama@email.com"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary text-sm"
+              placeholder="Minimal 6 karakter"
+            />
+          </div>
+        </div>
+
         {error && (
-          <p className="mb-4 text-sm text-red-500">{error}</p>
+          <p className="mb-4 text-xs font-semibold text-red-500 bg-red-50 p-3 rounded-lg">{error}</p>
         )}
+
+        <button
+          onClick={handleEmailRegister}
+          disabled={loading || !email || !password}
+          className="w-full bg-primary text-white font-semibold py-3.5 rounded-lg disabled:opacity-50 hover:bg-primary/90 transition-colors text-sm mb-4 shadow-sm"
+        >
+          {loading ? 'Memproses...' : 'Daftar Akun'}
+        </button>
+
+        <div className="relative flex py-2 items-center mb-4">
+          <div className="flex-grow border-t border-gray-200"></div>
+          <span className="flex-shrink mx-4 text-gray-400 text-xs font-medium">atau</span>
+          <div className="flex-grow border-t border-gray-200"></div>
+        </div>
 
         <button
           onClick={handleGoogleSignIn}
           disabled={loading}
-          className="w-full bg-white border border-gray-300 text-gray-700 font-semibold py-3.5 rounded-lg flex items-center justify-center gap-3 hover:bg-gray-50 transition-colors shadow-sm disabled:opacity-50"
+          className="w-full bg-white border border-gray-300 text-gray-700 font-semibold py-3.5 rounded-lg flex items-center justify-center gap-3 hover:bg-gray-50 transition-colors shadow-sm disabled:opacity-50 text-sm"
         >
           <svg className="w-5 h-5" viewBox="0 0 24 24">
             <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
@@ -140,10 +204,8 @@ export function WelcomePage({ onLogin }: WelcomePageProps) {
     <div className="flex flex-col h-full bg-white relative overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between px-6 py-6 pt-12 z-10">
-        <div className="flex items-center gap-1.5">
-          <div className="flex items-center justify-center bg-primary rounded px-1 py-0.5">
-            <Activity className="w-5 h-5 text-white" strokeWidth={2.5} />
-          </div>
+        <div className="flex items-center gap-2">
+          <img src="/logo.jpg" alt="Garuda Invest" className="w-8 h-8 rounded object-cover shadow-sm" />
           <span className="font-bold text-xl tracking-tight text-gray-900">Garuda Invest</span>
         </div>
         {/* Indonesian flag mock */}

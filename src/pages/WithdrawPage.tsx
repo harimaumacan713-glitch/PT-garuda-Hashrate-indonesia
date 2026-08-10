@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { ChevronLeft, History, Headphones, ChevronRight, Info } from 'lucide-react';
+import { ChevronLeft, History, Headphones, ChevronRight, Info, Landmark, ArrowRightLeft, ShieldCheck } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAuth } from '../contexts/AuthContext';
 import { db } from '../lib/firebase';
 import { ref, get, set, serverTimestamp, runTransaction, push } from 'firebase/database';
+import { cn } from '../lib/utils';
 
 type WithdrawPageProps = {
   onBack: () => void;
@@ -18,8 +19,23 @@ export function WithdrawPage({ onBack }: WithdrawPageProps) {
   const [isProcessing, setIsProcessing] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  // Transfer destination type: 'project2' (default) or 'bank'
+  const [withdrawDestination, setWithdrawDestination] = useState<'project2' | 'bank'>('project2');
+
+  // Bank account state
+  const [bankAccount, setBankAccount] = useState({
+    bankName: 'JAGO',
+    accountNumber: '103653847791',
+    accountHolder: 'INVESTOR'
+  });
+  const [showEditBank, setShowEditBank] = useState(false);
+  const [editBankName, setEditBankName] = useState('JAGO');
+  const [editAccNum, setEditAccNum] = useState('');
+  const [editAccHolder, setEditAccHolder] = useState('');
+
   React.useEffect(() => {
     if (user) {
+      // 1. Fetch balance
       const balanceRef = ref(db, `users/${user.uid}/balance`);
       get(balanceRef).then((snapshot) => {
         if (snapshot.exists()) {
@@ -30,8 +46,50 @@ export function WithdrawPage({ onBack }: WithdrawPageProps) {
           setWithdrawableBalance(initialBalance);
         }
       }).catch(console.error);
+
+      // 2. Fetch or initialize Bank Account
+      const bankRef = ref(db, `users/${user.uid}/bankAccount`);
+      get(bankRef).then((snapshot) => {
+        if (snapshot.exists()) {
+          const data = snapshot.val();
+          setBankAccount(data);
+          setEditBankName(data.bankName || 'JAGO');
+          setEditAccNum(data.accountNumber || '');
+          setEditAccHolder(data.accountHolder || '');
+        } else {
+          const defaultHolder = (user.displayName || user.email?.split('@')[0] || 'INVESTOR').toUpperCase();
+          const defaultAccNum = `103${Math.floor(100000000 + Math.random() * 900000000)}`;
+          const defaultBank = {
+            bankName: 'JAGO',
+            accountNumber: defaultAccNum,
+            accountHolder: defaultHolder
+          };
+          set(bankRef, defaultBank).catch(console.error);
+          setBankAccount(defaultBank);
+          setEditBankName('JAGO');
+          setEditAccNum(defaultAccNum);
+          setEditAccHolder(defaultHolder);
+        }
+      }).catch(console.error);
     }
   }, [user]);
+
+  const handleSaveBank = async () => {
+    if (!user) return;
+    if (!editAccNum.trim() || !editAccHolder.trim()) return;
+    const updated = {
+      bankName: editBankName.trim().toUpperCase() || 'JAGO',
+      accountNumber: editAccNum.trim(),
+      accountHolder: editAccHolder.trim().toUpperCase()
+    };
+    try {
+      await set(ref(db, `users/${user.uid}/bankAccount`), updated);
+      setBankAccount(updated);
+      setShowEditBank(false);
+    } catch (e) {
+      console.error('Failed to update bank account:', e);
+    }
+  };
   
   const handleToggle = () => {
     setWithdrawAll(!withdrawAll);
@@ -43,19 +101,28 @@ export function WithdrawPage({ onBack }: WithdrawPageProps) {
   };
 
   const handleLanjut = () => {
-    const numericAmount = parseInt(amount.replace(/,/g, ''));
+    const numericAmount = parseInt(amount.replace(/,/g, ''), 10);
+    if (!user) {
+      setErrorMsg('Anda harus login terlebih dahulu.');
+      return;
+    }
     if (amount && numericAmount >= 10000 && numericAmount <= withdrawableBalance) {
       setStep('confirm');
       setErrorMsg(null);
     } else if (numericAmount > withdrawableBalance) {
-      setErrorMsg('Saldo tidak mencukupi');
+      setErrorMsg('Saldo tidak mencukupi.');
+    } else if (numericAmount < 10000) {
+      setErrorMsg('Nominal penarikan minimal Rp 10.000.');
     }
   };
 
   const handleWithdraw = async () => {
     if (!user || isProcessing) return;
-    const numericAmount = parseInt(amount.replace(/,/g, ''));
-    if (numericAmount > withdrawableBalance || numericAmount < 10000) return;
+    const numericAmount = parseInt(amount.replace(/,/g, ''), 10);
+    if (isNaN(numericAmount) || numericAmount > withdrawableBalance || numericAmount < 10000) {
+      setErrorMsg('Nominal penarikan tidak valid.');
+      return;
+    }
     
     setIsProcessing(true);
     setErrorMsg(null);
@@ -63,38 +130,87 @@ export function WithdrawPage({ onBack }: WithdrawPageProps) {
     try {
       const userBalanceRef = ref(db, `users/${user.uid}/balance`);
       
+      // Atomic deduction from Project 1
       const transactionResult = await runTransaction(userBalanceRef, (currentBalance) => {
         if (currentBalance === null) return currentBalance;
         if (currentBalance >= numericAmount) {
           return currentBalance - numericAmount;
         } else {
-          return undefined; 
+          return undefined; // Abort if balance insufficient
         }
       });
 
       if (transactionResult.committed) {
-        const transactionsRef = ref(db, 'transactions');
-        const newTxRef = push(transactionsRef);
-        await set(newTxRef, {
-          userId: user.uid,
-          transactionId: newTxRef.key,
-          type: "withdraw",
-          source: "garuda_inves",
-          destination: "jago",
-          amount: numericAmount,
-          status: "completed",
-          createdAt: serverTimestamp()
-        });
+        const newP1Balance = transactionResult.snapshot.val();
         
-        setWithdrawableBalance(transactionResult.snapshot.val());
+        // Sync wallet balance node
+        await set(ref(db, `wallets/${user.uid}/balance`), newP1Balance).catch(console.error);
+
+        // Generate unique transaction ID
+        const rawKey = push(ref(db, 'temp')).key || 'ABC';
+        const timestampSeconds = Math.floor(Date.now() / 1000);
+        const txKey = `WD-${timestampSeconds}-${rawKey.substring(rawKey.length - 6).toUpperCase()}`;
+
+        if (withdrawDestination === 'project2') {
+          // Save transaction log for Project 2 (Bank Jago) in requested Indonesian format
+          const project2TxData = {
+            transactionId: txKey,
+            userId: user.uid,
+            type: "tarik",
+            sumber: "garuda_invest",
+            tujuan: "jago",
+            jumlah: numericAmount,
+            status: "selesai",
+            createdAt: serverTimestamp()
+          };
+
+          // Save transaction log for Project 1 (Garuda Inves) in original format for UI history
+          const project1TxData = {
+            userId: user.uid,
+            transactionId: txKey,
+            type: "withdraw_project2",
+            source: "garuda_inves",
+            destination: "jago",
+            amount: numericAmount,
+            status: "completed",
+            createdAt: serverTimestamp(),
+            timestamp: Date.now()
+          };
+
+          // Simpan ke path khusus untuk Project 2 Bank Jago
+          await set(ref(db, `pengguna/${user.uid}/transaksi/${txKey}`), project2TxData);
+          
+          // Simpan ke path history Project 1 (UI)
+          await set(ref(db, `users/${user.uid}/transactions/${txKey}`), project1TxData);
+          await set(ref(db, `users/${user.uid}/withdrawals/${txKey}`), project1TxData);
+        } else {
+          // Bank withdrawal transaction
+          const txData = {
+            userId: user.uid,
+            transactionId: txKey,
+            type: "withdraw",
+            source: "garuda_inves",
+            destination: bankAccount.bankName,
+            accountNumber: bankAccount.accountNumber,
+            accountHolder: bankAccount.accountHolder,
+            amount: numericAmount,
+            status: "completed",
+            createdAt: serverTimestamp(),
+            timestamp: Date.now()
+          };
+          await set(ref(db, `users/${user.uid}/transactions/${txKey}`), txData);
+          await set(ref(db, `users/${user.uid}/withdrawals/${txKey}`), txData);
+        }
+
+        setWithdrawableBalance(newP1Balance);
         setStep('process');
       } else {
-        setErrorMsg('Penarikan gagal, saldo tidak mencukupi.');
+        setErrorMsg('Penarikan gagal: Saldo tidak mencukupi.');
         setStep('input');
       }
     } catch (e) {
-      console.error(e);
-      setErrorMsg('Terjadi kesalahan jaringan.');
+      console.error('Withdrawal error:', e);
+      setErrorMsg('Terjadi kesalahan sistem/jaringan.');
       setStep('input');
     } finally {
       setIsProcessing(false);
@@ -125,9 +241,9 @@ export function WithdrawPage({ onBack }: WithdrawPageProps) {
 
       <div className="flex-1 overflow-y-auto no-scrollbar">
         {/* Balance */}
-        <div className="flex flex-col items-center pt-6 pb-8">
+        <div className="flex flex-col items-center pt-6 pb-6">
           <span className="text-[13px] font-bold text-gray-900 mb-1.5">Saldo yang Dapat Ditarik</span>
-          <span className="text-[11px] text-gray-400 mb-2">07 August 2026</span>
+          <span className="text-[11px] text-gray-400 mb-2">Google Auth UID: {user?.uid ? `${user.uid.substring(0, 10)}...` : 'Not Logged In'}</span>
           <div className="flex items-center gap-1 cursor-pointer">
             <span className="text-lg font-bold text-[#00B26A]">Rp{withdrawableBalance.toLocaleString('en-US')}</span>
             <ChevronRight className="w-4 h-4 text-[#00B26A] mt-0.5" strokeWidth={2.5} />
@@ -167,7 +283,7 @@ export function WithdrawPage({ onBack }: WithdrawPageProps) {
         )}
 
         {/* Toggle All */}
-        <div className="px-4 flex justify-end items-center mb-8">
+        <div className="px-4 flex justify-end items-center mb-6">
           <span className="text-[13px] text-gray-500 mr-3">Tarik Semua Saldo</span>
           <button 
             onClick={handleToggle}
@@ -177,34 +293,157 @@ export function WithdrawPage({ onBack }: WithdrawPageProps) {
           </button>
         </div>
 
-        {/* Transfer Destination */}
+        {/* Destination Option Tabs */}
         <div className="px-4 mb-6">
           <label className="block text-[13px] font-bold text-gray-900 mb-2">
-            Transfer ke
+            Tujuan Withdraw / Transfer
           </label>
-          <div className="border border-gray-200 rounded-lg p-4 flex items-center gap-4 bg-white">
-            <div className="w-12 h-12 bg-[#f6891f] rounded-full flex items-center justify-center shrink-0">
-               <svg viewBox="0 0 24 24" fill="none" className="w-7 h-7">
-                 <path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z" fill="#f6891f" />
-                 <path d="M15.5 8.5v3c0 2-1.5 3.5-3.5 3.5s-3.5-1.5-3.5-3.5v-1h2v1c0 1 .5 1.5 1.5 1.5s1.5-.5 1.5-1.5v-3h2z" fill="white" />
-                 <circle cx="15.5" cy="6" r="1.5" fill="white" />
-                 <path d="M7.5 15.5c1 1.5 2.5 2.5 4.5 2.5s3.5-1 4.5-2.5" stroke="white" strokeWidth="2" strokeLinecap="round" />
-               </svg>
+          <div className="grid grid-cols-2 gap-2 mb-3">
+            <button
+              type="button"
+              onClick={() => setWithdrawDestination('project2')}
+              className={cn(
+                "p-3 rounded-xl border text-xs font-bold flex flex-col items-center gap-1.5 transition-all text-center",
+                withdrawDestination === 'project2' 
+                  ? "border-[#00B26A] bg-emerald-50/60 text-[#00B26A] shadow-sm ring-1 ring-[#00B26A]" 
+                  : "border-gray-200 text-gray-600 hover:bg-gray-50"
+              )}
+            >
+              <div className="w-7 h-7 rounded-full bg-[#00B26A] text-white flex items-center justify-center font-bold text-xs shadow-sm">
+                P2
+              </div>
+              <span>Withdraw ke Project 2</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setWithdrawDestination('bank')}
+              className={cn(
+                "p-3 rounded-xl border text-xs font-bold flex flex-col items-center gap-1.5 transition-all text-center",
+                withdrawDestination === 'bank' 
+                  ? "border-[#00B26A] bg-emerald-50/60 text-[#00B26A] shadow-sm ring-1 ring-[#00B26A]" 
+                  : "border-gray-200 text-gray-600 hover:bg-gray-50"
+              )}
+            >
+              <div className="w-7 h-7 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-xs shadow-sm">
+                <Landmark className="w-4 h-4" />
+              </div>
+              <span>Rekening Bank</span>
+            </button>
+          </div>
+
+          {/* Destination Card Detail */}
+          {withdrawDestination === 'project2' ? (
+            <div className="border border-emerald-200 rounded-xl p-4 flex items-center justify-between bg-emerald-50/30">
+              <div className="flex items-center gap-3.5">
+                <div className="w-11 h-11 bg-[#00B26A] rounded-full flex items-center justify-center shrink-0 text-white font-bold text-sm shadow-sm">
+                  P2
+                </div>
+                <div className="flex flex-col">
+                  <div className="flex items-center gap-1.5 mb-0.5">
+                    <span className="text-[13px] font-bold text-gray-900">Project 2</span>
+                    <span className="bg-emerald-100 text-[#00B26A] text-[9px] font-extrabold px-1.5 py-0.5 rounded uppercase">Otomatis UID</span>
+                  </div>
+                  <span className="text-[11px] font-mono text-gray-600 tracking-tight">UID: {user?.uid || '-'}</span>
+                  <span className="text-[10px] text-gray-500">Penerima Otomatis (Akun Project 2 Saya)</span>
+                </div>
+              </div>
             </div>
-            <div className="flex flex-col">
-              <span className="text-[12px] text-gray-500 mb-0.5">JAGO</span>
-              <span className="text-[14px] font-bold text-gray-900 mb-0.5 tracking-tight">103653847791</span>
-              <span className="text-[11px] text-gray-400 uppercase">DEWANGGA</span>
+          ) : (
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-[11px] font-semibold text-gray-500">Rekening Tujuan</span>
+                <button 
+                  onClick={() => setShowEditBank(true)}
+                  className="text-[11px] font-bold text-[#00B26A] hover:underline"
+                >
+                  Ubah Rekening
+                </button>
+              </div>
+              <div className="border border-gray-200 rounded-lg p-4 flex items-center justify-between bg-white">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 bg-[#f6891f] rounded-full flex items-center justify-center shrink-0">
+                     <svg viewBox="0 0 24 24" fill="none" className="w-7 h-7">
+                       <path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z" fill="#f6891f" />
+                       <path d="M15.5 8.5v3c0 2-1.5 3.5-3.5 3.5s-3.5-1.5-3.5-3.5v-1h2v1c0 1 .5 1.5 1.5 1.5s1.5-.5 1.5-1.5v-3h2z" fill="white" />
+                       <circle cx="15.5" cy="6" r="1.5" fill="white" />
+                       <path d="M7.5 15.5c1 1.5 2.5 2.5 4.5 2.5s3.5-1 4.5-2.5" stroke="white" strokeWidth="2" strokeLinecap="round" />
+                     </svg>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-[12px] text-gray-500 mb-0.5">{bankAccount.bankName}</span>
+                    <span className="text-[14px] font-bold text-gray-900 mb-0.5 tracking-tight">{bankAccount.accountNumber}</span>
+                    <span className="text-[11px] text-gray-400 uppercase">{bankAccount.accountHolder}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Modal Ubah Rekening */}
+        {showEditBank && (
+          <div className="fixed inset-0 z-[70] bg-black/50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-xl max-w-sm w-full p-5 space-y-4 shadow-xl">
+              <h3 className="text-base font-bold text-gray-900">Ubah Rekening Bank</h3>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Nama Bank</label>
+                <input 
+                  type="text" 
+                  value={editBankName}
+                  onChange={(e) => setEditBankName(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-[#00B26A]"
+                  placeholder="Contoh: BANK JAGO / BCA / MANDIRI"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Nomor Rekening</label>
+                <input 
+                  type="text" 
+                  value={editAccNum}
+                  onChange={(e) => setEditAccNum(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-[#00B26A]"
+                  placeholder="Masukkan nomor rekening"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Nama Pemilik Rekening</label>
+                <input 
+                  type="text" 
+                  value={editAccHolder}
+                  onChange={(e) => setEditAccHolder(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-[#00B26A]"
+                  placeholder="Nama sesuai buku tabungan"
+                />
+              </div>
+              <div className="flex gap-2 pt-2">
+                <button 
+                  onClick={() => setShowEditBank(false)}
+                  className="flex-1 py-2.5 border border-gray-300 rounded-lg text-xs font-bold text-gray-600 hover:bg-gray-50"
+                >
+                  Batal
+                </button>
+                <button 
+                  onClick={handleSaveBank}
+                  className="flex-1 py-2.5 bg-[#00B26A] rounded-lg text-xs font-bold text-white hover:bg-[#00995c]"
+                >
+                  Simpan
+                </button>
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
         {/* Info Banner */}
         <div className="px-4 mb-8">
           <div className="bg-[#f0f4ff] rounded-lg p-3.5 flex items-start gap-3">
             <Info className="w-4 h-4 text-indigo-500 shrink-0 mt-0.5" strokeWidth={2.5} />
             <p className="text-[11px] text-gray-700 leading-relaxed pr-2">
-              Dana dari penjualan saham akan masuk ke <span className="font-bold text-gray-900">Saldo yang Dapat Ditarik</span> maksimal dalam 3 hari kerja.
+              {withdrawDestination === 'project2' ? (
+                <>Withdrawal ke <span className="font-bold text-gray-900">Project 2</span> diproses secara otomatis & instan menggunakan UID akun Firebase Anda.</>
+              ) : (
+                <>Dana dari penjualan saham akan masuk ke <span className="font-bold text-gray-900">Saldo yang Dapat Ditarik</span> maksimal dalam 3 hari kerja.</>
+              )}
             </p>
           </div>
         </div>
@@ -215,7 +454,7 @@ export function WithdrawPage({ onBack }: WithdrawPageProps) {
         <button 
           onClick={handleLanjut}
           className={`w-full py-3.5 rounded-lg text-[13px] font-bold transition-colors ${
-            amount && parseInt(amount.replace(/,/g, '')) >= 10000 
+            amount && parseInt(amount.replace(/,/g, ''), 10) >= 10000 
               ? 'bg-[#00B26A] text-white hover:bg-[#00995c]' 
               : 'bg-[#c3ecd7] text-white cursor-not-allowed'
           }`}
@@ -250,7 +489,9 @@ export function WithdrawPage({ onBack }: WithdrawPageProps) {
                 {step === 'confirm' ? (
                   <>
                     <div className="flex flex-col items-center pt-2 pb-6">
-                      <span className="text-[12px] font-medium text-gray-600 mb-2">Nominal Penarikan</span>
+                      <span className="text-[12px] font-medium text-gray-600 mb-2">
+                        {withdrawDestination === 'project2' ? 'Nominal Transfer ke Project 2' : 'Nominal Penarikan'}
+                      </span>
                       <span className="text-[26px] font-bold text-[#00B26A]">Rp{amount}</span>
                     </div>
 
@@ -259,21 +500,37 @@ export function WithdrawPage({ onBack }: WithdrawPageProps) {
                       <label className="block text-[13px] font-bold text-gray-900 mb-3">
                         Transfer ke
                       </label>
-                      <div className="border border-gray-100 rounded-lg p-4 flex items-center gap-4 bg-white shadow-sm">
-                        <div className="w-12 h-12 bg-[#f6891f] rounded-full flex items-center justify-center shrink-0">
-                           <svg viewBox="0 0 24 24" fill="none" className="w-7 h-7">
-                             <path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z" fill="#f6891f" />
-                             <path d="M15.5 8.5v3c0 2-1.5 3.5-3.5 3.5s-3.5-1.5-3.5-3.5v-1h2v1c0 1 .5 1.5 1.5 1.5s1.5-.5 1.5-1.5v-3h2z" fill="white" />
-                             <circle cx="15.5" cy="6" r="1.5" fill="white" />
-                             <path d="M7.5 15.5c1 1.5 2.5 2.5 4.5 2.5s3.5-1 4.5-2.5" stroke="white" strokeWidth="2" strokeLinecap="round" />
-                           </svg>
+                      {withdrawDestination === 'project2' ? (
+                        <div className="border border-emerald-200 rounded-lg p-4 flex items-center gap-4 bg-emerald-50/40 shadow-sm">
+                          <div className="w-12 h-12 bg-[#00B26A] rounded-full flex items-center justify-center shrink-0 text-white font-bold text-base shadow-sm">
+                            P2
+                          </div>
+                          <div className="flex flex-col">
+                            <div className="flex items-center gap-1.5 mb-0.5">
+                              <span className="text-[14px] font-bold text-gray-900">Project 2</span>
+                              <span className="bg-emerald-100 text-[#00B26A] text-[9px] font-extrabold px-1.5 py-0.5 rounded">Otomatis UID</span>
+                            </div>
+                            <span className="text-[12px] font-mono text-gray-700 tracking-tight">UID: {user?.uid || '-'}</span>
+                            <span className="text-[11px] text-gray-500">Penerima: Akun Saya di Project 2</span>
+                          </div>
                         </div>
-                        <div className="flex flex-col">
-                          <span className="text-[12px] text-gray-500 mb-0.5">JAGO</span>
-                          <span className="text-[14px] font-bold text-gray-900 mb-0.5 tracking-tight">103653847791</span>
-                          <span className="text-[11px] text-gray-400 uppercase">DEWANGGA</span>
+                      ) : (
+                        <div className="border border-gray-100 rounded-lg p-4 flex items-center gap-4 bg-white shadow-sm">
+                          <div className="w-12 h-12 bg-[#f6891f] rounded-full flex items-center justify-center shrink-0">
+                             <svg viewBox="0 0 24 24" fill="none" className="w-7 h-7">
+                               <path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z" fill="#f6891f" />
+                               <path d="M15.5 8.5v3c0 2-1.5 3.5-3.5 3.5s-3.5-1.5-3.5-3.5v-1h2v1c0 1 .5 1.5 1.5 1.5s1.5-.5 1.5-1.5v-3h2z" fill="white" />
+                               <circle cx="15.5" cy="6" r="1.5" fill="white" />
+                               <path d="M7.5 15.5c1 1.5 2.5 2.5 4.5 2.5s3.5-1 4.5-2.5" stroke="white" strokeWidth="2" strokeLinecap="round" />
+                             </svg>
+                          </div>
+                          <div className="flex flex-col">
+                            <span className="text-[12px] text-gray-500 mb-0.5">{bankAccount.bankName}</span>
+                            <span className="text-[14px] font-bold text-gray-900 mb-0.5 tracking-tight">{bankAccount.accountNumber}</span>
+                            <span className="text-[11px] text-gray-400 uppercase">{bankAccount.accountHolder}</span>
+                          </div>
                         </div>
-                      </div>
+                      )}
                     </div>
 
                     {/* Detail Penarikan */}
@@ -283,7 +540,7 @@ export function WithdrawPage({ onBack }: WithdrawPageProps) {
                       </label>
                       <div className="border border-gray-100 rounded-lg bg-white shadow-sm overflow-hidden text-[13px]">
                         <div className="flex justify-between p-3.5 border-b border-gray-50">
-                          <span className="text-gray-600">Nominal Penarikan</span>
+                          <span className="text-gray-600">Nominal Transfer</span>
                           <span className="text-gray-900 font-medium">Rp{amount}</span>
                         </div>
                         <div className="flex justify-between p-3.5 border-b border-gray-50">
@@ -302,7 +559,11 @@ export function WithdrawPage({ onBack }: WithdrawPageProps) {
                       <div className="bg-[#f0f4ff] rounded-lg p-3.5 flex items-start gap-3">
                         <Info className="w-4 h-4 text-indigo-500 shrink-0 mt-0.5" strokeWidth={2.5} />
                         <p className="text-[11px] text-gray-700 leading-relaxed pr-2">
-                          Dana akan ditransfer maksimal dalam <span className="font-bold text-gray-900">2 hari kerja.</span>
+                          {withdrawDestination === 'project2' ? (
+                            <>Saldo sebesar <span className="font-bold text-gray-900">Rp{amount}</span> akan langsung ditransfer ke saldo Project 2 milik UID Anda secara instan.</>
+                          ) : (
+                            <>Dana akan ditransfer maksimal dalam <span className="font-bold text-gray-900">2 hari kerja.</span></>
+                          )}
                         </p>
                       </div>
                     </div>
@@ -310,9 +571,13 @@ export function WithdrawPage({ onBack }: WithdrawPageProps) {
                     <div className="pb-4">
                       <button 
                         onClick={handleWithdraw}
-                        className="w-full py-3.5 rounded-lg text-[14px] font-bold transition-colors bg-[#00B26A] text-white hover:bg-[#00995c]"
+                        disabled={isProcessing}
+                        className={cn(
+                          "w-full py-3.5 rounded-lg text-[14px] font-bold transition-colors bg-[#00B26A] text-white hover:bg-[#00995c]",
+                          isProcessing && "opacity-60 cursor-not-allowed"
+                        )}
                       >
-                        Withdraw
+                        {isProcessing ? "Memproses Transfer..." : "Withdraw / Transfer"}
                       </button>
                     </div>
                   </>
@@ -333,22 +598,20 @@ export function WithdrawPage({ onBack }: WithdrawPageProps) {
                         {/* Paper horizontal line at bottom */}
                         <line x1="40" y1="68" x2="60" y2="68" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
                       </svg>
-                      {/* Spinner */}
-                      <div className="absolute bottom-1 right-1 w-10 h-10">
-                         <svg viewBox="0 0 24 24" className="w-full h-full text-[#00B26A] animate-spin" style={{ animationDuration: '2s' }}>
-                           <circle cx="12" cy="3" r="2" fill="currentColor" opacity="1" />
-                           <circle cx="18.36" cy="5.64" r="2" fill="currentColor" opacity="0.8" />
-                           <circle cx="21" cy="12" r="2" fill="currentColor" opacity="0.6" />
-                           <circle cx="18.36" cy="18.36" r="2" fill="currentColor" opacity="0.4" />
-                           <circle cx="12" cy="21" r="2" fill="currentColor" opacity="0.2" />
-                           <circle cx="5.64" cy="18.36" r="2" fill="currentColor" opacity="0.1" />
-                           <circle cx="3" cy="12" r="2" fill="currentColor" opacity="0.1" />
-                           <circle cx="5.64" cy="5.64" r="2" fill="currentColor" opacity="0.2" />
-                         </svg>
+                      {/* Checkmark icon overlay */}
+                      <div className="absolute bottom-1 right-1 w-10 h-10 bg-[#00B26A] text-white rounded-full flex items-center justify-center shadow-md">
+                        <ShieldCheck className="w-6 h-6" />
                       </div>
                     </div>
-                    <span className="text-[13px] font-medium text-gray-700 mb-1.5">Penarikan akan Diproses</span>
-                    <span className="text-[26px] font-bold text-[#00B26A] mb-12">Rp{amount}</span>
+                    <span className="text-[13px] font-medium text-gray-700 mb-1.5">
+                      {withdrawDestination === 'project2' ? 'Transfer ke Project 2 Berhasil' : 'Penarikan Berhasil Diproses'}
+                    </span>
+                    <span className="text-[26px] font-bold text-[#00B26A] mb-2">Rp{amount}</span>
+                    <p className="text-xs text-gray-500 mb-8 text-center max-w-xs">
+                      {withdrawDestination === 'project2' 
+                        ? 'Saldo berhasil dipindahkan ke Project 2 untuk UID akun ini.' 
+                        : 'Permintaan penarikan ke rekening bank Anda telah dicatat.'}
+                    </p>
                     
                     <div className="w-full pb-4">
                       <button 
@@ -368,3 +631,4 @@ export function WithdrawPage({ onBack }: WithdrawPageProps) {
     </div>
   );
 }
+

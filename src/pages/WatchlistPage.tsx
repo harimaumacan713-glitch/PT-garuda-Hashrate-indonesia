@@ -10,6 +10,7 @@ export function WatchlistPage({ onOpenProfile }: { onOpenProfile?: () => void })
           <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Garuda" alt="Avatar" className="h-full w-full object-cover" />
         </button>
         <div className="flex items-center gap-2">
+          <img src="/logo.jpg" alt="Garuda Invest" className="w-6 h-6 rounded object-cover shadow-sm" />
           <span className="text-xl font-bold tracking-tight text-secondary">GARUDA<span className="text-primary">INVEST</span></span>
         </div>
         <button className="text-gray-500">
