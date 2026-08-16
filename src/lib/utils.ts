@@ -5,8 +5,9 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-export function getEffectiveLivePrice(avgPrice: number, livePrice: number, basePriceHint: number = 97): number {
+export function getEffectiveLivePrice(avgPrice: number, livePrice: number, basePriceHint?: number): number {
   if (livePrice && livePrice > 0) return livePrice;
   if (avgPrice && avgPrice > 0) return avgPrice;
-  return basePriceHint || 97;
+  if (basePriceHint && basePriceHint > 0) return basePriceHint;
+  return 0;
 }

@@ -1,10 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { ChevronRight, ChevronLeft, Calendar, Search, ChevronDown, Activity, SlidersHorizontal, ArrowUpRight, ArrowDownRight, Globe } from 'lucide-react';
+import { ChevronRight, ChevronLeft, Calendar, Search, ChevronDown, Activity, SlidersHorizontal, ArrowUpRight, ArrowDownRight, Globe, TrendingUp } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { ResponsiveContainer, YAxis, AreaChart, Area } from 'recharts';
 import { AssetDetailsPage } from './AssetDetailsPage';
+import { RunningTradeScreen } from '../components/RunningTradeScreen';
+import { TopBrokerScreen } from '../components/TopBrokerScreen';
+import { BrokerActivityScreen } from '../components/BrokerActivityScreen';
+import { TopStockScreen } from '../components/TopStockScreen';
+import { InsiderActivityScreen } from '../components/InsiderActivityScreen';
 import { db } from '../lib/firebase';
 import { ref, set, onValue } from 'firebase/database';
+import { ALL_GLOBAL_ASSETS, getAssetLogo, getAssetName, isIDXStock, GlobalAssetItem } from '../lib/assetsData';
+import { AssetLogo } from '../components/AssetLogo';
 
 const shortcuts = [
   { 
@@ -85,92 +92,50 @@ const shortcuts = [
   }
 ];
 
-export interface GlobalAssetItem {
-  symbol: string;
-  name: string;
-  category: 'Crypto' | 'Saham Global' | 'Komoditas & Forex';
-  logo: string;
-  basePrice?: number;
-}
-
-export const ALL_GLOBAL_ASSETS: GlobalAssetItem[] = [
-  // CRYPTO TOKENS
-  { symbol: 'BTCUSDT', name: 'Bitcoin', category: 'Crypto', logo: 'https://cryptologos.cc/logos/bitcoin-btc-logo.png' },
-  { symbol: 'ETHUSDT', name: 'Ethereum', category: 'Crypto', logo: 'https://cryptologos.cc/logos/ethereum-eth-logo.png' },
-  { symbol: 'BNBUSDT', name: 'BNB', category: 'Crypto', logo: 'https://cryptologos.cc/logos/bnb-bnb-logo.png' },
-  { symbol: 'SOLUSDT', name: 'Solana', category: 'Crypto', logo: 'https://cryptologos.cc/logos/solana-sol-logo.png' },
-  { symbol: 'XRPUSDT', name: 'XRP', category: 'Crypto', logo: 'https://cryptologos.cc/logos/xrp-xrp-logo.png' },
-  { symbol: 'ADAUSDT', name: 'Cardano', category: 'Crypto', logo: 'https://cryptologos.cc/logos/cardano-ada-logo.png' },
-  { symbol: 'DOGEUSDT', name: 'Dogecoin', category: 'Crypto', logo: 'https://cryptologos.cc/logos/dogecoin-doge-logo.png' },
-  { symbol: 'AVAXUSDT', name: 'Avalanche', category: 'Crypto', logo: 'https://cryptologos.cc/logos/avalanche-avax-logo.png' },
-  { symbol: 'MATICUSDT', name: 'Polygon (POL)', category: 'Crypto', logo: 'https://cryptologos.cc/logos/polygon-matic-logo.png' },
-  { symbol: 'LINKUSDT', name: 'Chainlink', category: 'Crypto', logo: 'https://cryptologos.cc/logos/chainlink-link-logo.png' },
-  { symbol: 'DOTUSDT', name: 'Polkadot', category: 'Crypto', logo: 'https://cryptologos.cc/logos/polkadot-new-dot-logo.png' },
-  { symbol: 'NEARUSDT', name: 'NEAR Protocol', category: 'Crypto', logo: 'https://cryptologos.cc/logos/near-protocol-near-logo.png' },
-  { symbol: 'SUIUSDT', name: 'Sui Network', category: 'Crypto', logo: 'https://cryptologos.cc/logos/sui-sui-logo.png' },
-  { symbol: 'PEPEUSDT', name: 'Pepe Coin', category: 'Crypto', logo: 'https://cryptologos.cc/logos/pepe-pepe-logo.png' },
-  { symbol: 'SHIBUSDT', name: 'Shiba Inu', category: 'Crypto', logo: 'https://cryptologos.cc/logos/shiba-inu-shib-logo.png' },
-  { symbol: 'ATOMUSDT', name: 'Cosmos', category: 'Crypto', logo: 'https://cryptologos.cc/logos/cosmos-atom-logo.png' },
-  { symbol: 'TONUSDT', name: 'Toncoin', category: 'Crypto', logo: 'https://cryptologos.cc/logos/toncoin-ton-logo.png' },
-  { symbol: 'LTCUSDT', name: 'Litecoin', category: 'Crypto', logo: 'https://cryptologos.cc/logos/litecoin-ltc-logo.png' },
-  { symbol: 'UNIUSDT', name: 'Uniswap', category: 'Crypto', logo: 'https://cryptologos.cc/logos/uniswap-uni-logo.png' },
-
-  // SAHAM GLOBAL (US TECH)
-  { symbol: 'NVDA', name: 'NVIDIA Corporation', category: 'Saham Global', logo: 'https://upload.wikimedia.org/wikipedia/commons/2/21/Nvidia_logo.svg', basePrice: 128.50 },
-  { symbol: 'AAPL', name: 'Apple Inc.', category: 'Saham Global', logo: 'https://upload.wikimedia.org/wikipedia/commons/f/fa/Apple_logo_black.svg', basePrice: 224.30 },
-  { symbol: 'TSLA', name: 'Tesla, Inc.', category: 'Saham Global', logo: 'https://upload.wikimedia.org/wikipedia/commons/e/e8/Tesla_logo.png', basePrice: 210.80 },
-  { symbol: 'MSFT', name: 'Microsoft Corporation', category: 'Saham Global', logo: 'https://upload.wikimedia.org/wikipedia/commons/4/44/Microsoft_logo.svg', basePrice: 448.20 },
-  { symbol: 'AMZN', name: 'Amazon.com, Inc.', category: 'Saham Global', logo: 'https://upload.wikimedia.org/wikipedia/commons/a/a9/Amazon_logo.svg', basePrice: 186.40 },
-  { symbol: 'GOOGL', name: 'Alphabet Inc. (Google)', category: 'Saham Global', logo: 'https://upload.wikimedia.org/wikipedia/commons/c/c1/Google_%22G%22_logo.svg', basePrice: 172.90 },
-  { symbol: 'META', name: 'Meta Platforms Inc.', category: 'Saham Global', logo: 'https://upload.wikimedia.org/wikipedia/commons/7/7b/Meta_Platforms_Inc._logo.svg', basePrice: 512.60 },
-  { symbol: 'NFLX', name: 'Netflix Inc.', category: 'Saham Global', logo: 'https://upload.wikimedia.org/wikipedia/commons/0/08/Netflix_2015_logo.svg', basePrice: 635.40 },
-  { symbol: 'AMD', name: 'Advanced Micro Devices', category: 'Saham Global', logo: 'https://upload.wikimedia.org/wikipedia/commons/7/7c/AMD_Logo.svg', basePrice: 132.10 },
-  { symbol: 'INTC', name: 'Intel Corporation', category: 'Saham Global', logo: 'https://upload.wikimedia.org/wikipedia/commons/7/7d/Intel_logo_%282020%29.svg', basePrice: 20.40 },
-  { symbol: 'COIN', name: 'Coinbase Global, Inc.', category: 'Saham Global', logo: 'https://upload.wikimedia.org/wikipedia/commons/5/50/Coinbase_Logo_2019.svg', basePrice: 205.80 },
-
-  // KOMODITAS & FOREX
-  { symbol: 'GOLD', name: 'Gold / Emas Global (XAU/USD)', category: 'Komoditas & Forex', logo: 'https://cdn-icons-png.flaticon.com/512/2822/2822831.png', basePrice: 2430.50 },
-  { symbol: 'SILVER', name: 'Silver / Perak Global (XAG/USD)', category: 'Komoditas & Forex', logo: 'https://cdn-icons-png.flaticon.com/512/2822/2822842.png', basePrice: 27.80 },
-  { symbol: 'SPX', name: 'S&P 500 Index', category: 'Komoditas & Forex', logo: 'https://upload.wikimedia.org/wikipedia/commons/1/18/S%26P_500_logo.svg', basePrice: 5450.20 },
-  { symbol: 'NDX', name: 'NASDAQ 100 Index', category: 'Komoditas & Forex', logo: 'https://upload.wikimedia.org/wikipedia/commons/8/87/Nasdaq_Logo.svg', basePrice: 19120.40 },
-  { symbol: 'EURUSD', name: 'EUR / USD Forex', category: 'Komoditas & Forex', logo: 'https://upload.wikimedia.org/wikipedia/commons/5/5c/Euro_symbol.svg', basePrice: 1.0925 },
-];
-
 export function SearchPage({ onOpenProfile }: { onOpenProfile?: () => void }) {
   const [activeTab, setActiveTab] = useState<'MARKET' | 'GLOBAL' | 'BONDS' | 'REKSADANA'>('MARKET');
-  const [categoryFilter, setCategoryFilter] = useState<'Semua' | 'Crypto' | 'Saham Global' | 'Komoditas & Forex'>('Semua');
+  const [categoryFilter, setCategoryFilter] = useState<'Semua' | 'Saham IDX' | 'Saham Global' | 'Crypto' | 'Komoditas & Forex'>('Semua');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedAsset, setSelectedAsset] = useState<string | null>(null);
+  const [activeScreen, setActiveScreen] = useState<string | null>(null);
+
+  // Featured Header Asset: Default to BTC/USD with live real-time chart
+  const [featuredAsset, setFeaturedAsset] = useState<'BTCUSDT' | 'BBCA'>('BTCUSDT');
 
   const [chartData, setChartData] = useState<{value: number}[]>([]);
-  const [btcData, setBtcData] = useState({
-    price: '0.00',
-    change: '0.00',
-    changePercent: '0.00',
+  const [headerAssetData, setHeaderAssetData] = useState({
+    symbol: 'BTCUSDT',
+    name: 'Bitcoin',
+    price: '63,138.78',
+    change: '+890.50',
+    changePercent: '1.43',
     up: true,
-    open: '0.00',
-    high: '0.00',
-    low: '0.00',
-    vol: '0',
-    quoteVol: '0',
-    freq: '0'
+    open: '62,248.28',
+    high: '63,450.00',
+    low: '62,100.00',
+    vol: '38.45K BTC',
+    quoteVol: '$2.43B',
+    freq: '1,840,500',
+    currency: 'USD'
   });
 
   // Real-time market prices state
   const [assetPrices, setAssetPrices] = useState<Record<string, { price: string, change: string, pct: string, up: boolean, rawPrice: number }>>({});
 
-  // Initialize prices for non-crypto assets
+  // Initialize default prices for all assets
   useEffect(() => {
     const initialPrices: Record<string, { price: string, change: string, pct: string, up: boolean, rawPrice: number }> = {};
     ALL_GLOBAL_ASSETS.forEach(item => {
       if (item.basePrice) {
         const p = item.basePrice;
-        const changePct = ((Math.random() - 0.3) * 3).toFixed(2);
+        const changePct = ((Math.random() - 0.3) * 2.5).toFixed(2);
         const up = parseFloat(changePct) >= 0;
-        const changeVal = (p * (parseFloat(changePct) / 100)).toFixed(2);
+        const changeVal = (p * (parseFloat(changePct) / 100)).toFixed(item.currency === 'IDR' ? 0 : 2);
         initialPrices[item.symbol] = {
-          price: p >= 100 ? p.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : p.toString(),
-          change: `${up ? '+' : ''}${changeVal}`,
+          price: item.currency === 'IDR' 
+            ? p.toLocaleString('id-ID')
+            : (p >= 100 ? p.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : p.toString()),
+          change: `${up ? '+' : ''}${item.currency === 'IDR' ? Number(changeVal).toLocaleString('id-ID') : changeVal}`,
           pct: `${up ? '+' : ''}${changePct}%`,
           up,
           rawPrice: p
@@ -180,26 +145,98 @@ export function SearchPage({ onOpenProfile }: { onOpenProfile?: () => void }) {
     setAssetPrices(prev => ({ ...initialPrices, ...prev }));
   }, []);
 
-  // Fetch initial BTC chart data
+  // Fetch featured asset data & chart (BBCA or BTC)
   useEffect(() => {
-    fetch('https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1m&limit=50')
-      .then(res => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return res.json();
-      })
-      .then(data => {
-        if (Array.isArray(data)) {
-          const formatted = data.map((d: any) => ({ value: parseFloat(d[4]) }));
-          setChartData(formatted);
-        }
-      })
-      .catch((err) => {
-        console.warn('Failed to fetch initial chart data:', err);
-        const dummy = Array.from({ length: 50 }, (_, i) => ({ value: 98000 + Math.sin(i / 5) * 200 }));
-        setChartData(dummy);
-      });
+    if (featuredAsset === 'BBCA') {
+      const fetchBBCA = () => {
+        fetch('/api/quote/BBCA')
+          .then(res => res.json())
+          .then(data => {
+            if (data && data.success && data.quote) {
+              const q = data.quote;
+              const isUp = (q.change || 0) >= 0;
+              setHeaderAssetData({
+                symbol: 'BBCA',
+                name: 'PT Bank Central Asia Tbk',
+                price: q.price ? q.price.toLocaleString('id-ID') : '6.350',
+                change: `${isUp ? '+' : ''}${(q.change || 0).toLocaleString('id-ID')}`,
+                changePercent: (q.pctChange || 0).toFixed(2),
+                up: isUp,
+                open: (q.open || q.price - (q.change || 0)).toLocaleString('id-ID'),
+                high: (q.high || q.price * 1.015).toLocaleString('id-ID'),
+                low: (q.low || q.price * 0.985).toLocaleString('id-ID'),
+                vol: q.volDisplay || (q.volume ? (q.volume > 1000000 ? (q.volume / 1000000).toFixed(1) + 'M Lot' : q.volume.toLocaleString('id-ID')) : '56.9M'),
+                quoteVol: q.valDisplay || '578.2B',
+                freq: q.freqDisplay || '24.120',
+                currency: 'IDR'
+              });
 
-    // Binance WebSockets for all Crypto assets
+              if (q.chart && q.chart.length > 0) {
+                setChartData(q.chart.map((c: any) => ({ value: c.value })));
+              }
+            }
+          })
+          .catch(() => {});
+      };
+
+      fetchBBCA();
+      const interval = setInterval(fetchBBCA, 1200);
+      return () => clearInterval(interval);
+    } else {
+      // BTC/USD Real-time Klines
+      let isMounted = true;
+      const fetchBTCKlines = () => {
+        fetch('https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1m&limit=60')
+          .then(res => res.json())
+          .then(data => {
+            if (Array.isArray(data) && isMounted) {
+              const formatted = data.map((d: any) => ({ value: parseFloat(d[4]) }));
+              setChartData(formatted);
+            }
+          })
+          .catch(() => {});
+      };
+
+      // Also fetch 24h ticker immediately for instant display
+      fetch('https://api.binance.com/api/v3/ticker/24hr?symbol=BTCUSDT')
+        .then(res => res.json())
+        .then(data => {
+          if (data && data.lastPrice && isMounted) {
+            const currentPrice = parseFloat(data.lastPrice);
+            const change = parseFloat(data.priceChange || '0');
+            const isUp = change >= 0;
+            const formatPrice = (val: number) => val.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+            setHeaderAssetData({
+              symbol: 'BTCUSDT',
+              name: 'Bitcoin',
+              price: formatPrice(currentPrice),
+              change: isUp ? `+${formatPrice(change)}` : formatPrice(change),
+              changePercent: parseFloat(data.priceChangePercent || '0').toFixed(2),
+              up: isUp,
+              open: formatPrice(parseFloat(data.openPrice || '0')),
+              high: formatPrice(parseFloat(data.highPrice || '0')),
+              low: formatPrice(parseFloat(data.lowPrice || '0')),
+              vol: `${(parseFloat(data.volume || '0') / 1000).toFixed(2)}K BTC`,
+              quoteVol: `$${(parseFloat(data.quoteVolume || '0') / 1000000000).toFixed(2)}B`,
+              freq: (data.count || 2450000).toLocaleString('id-ID'),
+              currency: 'USD'
+            });
+          }
+        })
+        .catch(() => {});
+
+      fetchBTCKlines();
+      const interval = setInterval(fetchBTCKlines, 5000);
+      return () => {
+        isMounted = false;
+        clearInterval(interval);
+      };
+    }
+  }, [featuredAsset]);
+
+  // Binance WebSockets for Crypto assets
+  useEffect(() => {
     const cryptoItems = ALL_GLOBAL_ASSETS.filter(a => a.category === 'Crypto');
     const streams = cryptoItems.map(c => `${c.symbol.toLowerCase()}@ticker`).join('/');
     
@@ -223,8 +260,10 @@ export function SearchPage({ onOpenProfile }: { onOpenProfile?: () => void }) {
             return val.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
           };
 
-          if (symbol === 'BTCUSDT') {
-            setBtcData({
+          if (symbol === 'BTCUSDT' && featuredAsset === 'BTCUSDT') {
+            setHeaderAssetData({
+              symbol: 'BTCUSDT',
+              name: 'Bitcoin',
               price: formatPrice(currentPrice),
               change: isUp ? `+${formatPrice(change)}` : formatPrice(change),
               changePercent: parseFloat(data.P || '0').toFixed(2),
@@ -234,7 +273,8 @@ export function SearchPage({ onOpenProfile }: { onOpenProfile?: () => void }) {
               low: formatPrice(parseFloat(data.l || '0')),
               vol: parseFloat(data.v || '0').toLocaleString('en-US', { maximumFractionDigits: 2 }),
               quoteVol: (parseFloat(data.q || '0') / 1000000).toFixed(2) + 'M',
-              freq: (data.n || 0).toLocaleString('en-US')
+              freq: (data.n || 0).toLocaleString('en-US'),
+              currency: 'USD'
             });
 
             setChartData(prev => {
@@ -264,9 +304,9 @@ export function SearchPage({ onOpenProfile }: { onOpenProfile?: () => void }) {
     return () => {
       if (ws) ws.close();
     };
-  }, []);
+  }, [featuredAsset]);
 
-  // Fetch real global market quotes from server API (Yahoo Finance & Binance)
+  // Fetch real market quotes (Indonesian IDX Stocks including BBCA, US Stocks & Crypto) from server API
   useEffect(() => {
     const fetchGlobalQuotes = async () => {
       try {
@@ -281,7 +321,10 @@ export function SearchPage({ onOpenProfile }: { onOpenProfile?: () => void }) {
             const q = quotes[item.symbol] || quotes[`${item.symbol}USDT`];
             if (q) {
               const isUp = (q.change || 0) >= 0;
+              const isIdr = item.currency === 'IDR' || isIDXStock(item.symbol);
+              
               const formatP = (val: number) => {
+                if (isIdr) return Math.round(val).toLocaleString('id-ID');
                 if (val < 0.01) return val.toFixed(6);
                 if (val < 10) return val.toFixed(4);
                 return val.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -301,12 +344,12 @@ export function SearchPage({ onOpenProfile }: { onOpenProfile?: () => void }) {
           setAssetPrices(prev => ({ ...prev, ...newPrices }));
         }
       } catch (err) {
-        console.warn('Failed to fetch global quotes:', err);
+        console.warn('Failed to fetch quotes:', err);
       }
     };
 
     fetchGlobalQuotes();
-    const interval = setInterval(fetchGlobalQuotes, 3000);
+    const interval = setInterval(fetchGlobalQuotes, 1500);
     return () => clearInterval(interval);
   }, []);
 
@@ -314,20 +357,38 @@ export function SearchPage({ onOpenProfile }: { onOpenProfile?: () => void }) {
     return <AssetDetailsPage symbol={selectedAsset} onBack={() => setSelectedAsset(null)} />;
   }
 
+  if (activeScreen === 'running') {
+    return <RunningTradeScreen onBack={() => setActiveScreen(null)} />;
+  }
+  if (activeScreen === 'broker') {
+    return <TopBrokerScreen onBack={() => setActiveScreen(null)} />;
+  }
+  if (activeScreen === 'activity') {
+    return <BrokerActivityScreen onBack={() => setActiveScreen(null)} />;
+  }
+  if (activeScreen === 'stock') {
+    return <TopStockScreen onBack={() => setActiveScreen(null)} />;
+  }
+  if (activeScreen === 'insider') {
+    return <InsiderActivityScreen onBack={() => setActiveScreen(null)} />;
+  }
+
   // Filter asset items
   const filteredAssets = ALL_GLOBAL_ASSETS.filter(asset => {
     // Search query filter
     const matchesSearch = !searchQuery || 
       asset.symbol.toLowerCase().includes(searchQuery.toLowerCase()) || 
-      asset.name.toLowerCase().includes(searchQuery.toLowerCase());
+      asset.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (asset.symbol === 'BBCA' && (searchQuery.toLowerCase().includes('bca') || searchQuery.toLowerCase().includes('bank central asia')));
 
     // Category filter
     let matchesCategory = true;
     if (categoryFilter !== 'Semua') {
       matchesCategory = asset.category === categoryFilter;
-    } else if (activeTab === 'GLOBAL') {
-      // In GLOBAL tab, prioritize Saham Global & Komoditas
+    } else if (activeTab === 'MARKET') {
       matchesCategory = true;
+    } else if (activeTab === 'GLOBAL') {
+      matchesCategory = asset.category === 'Saham Global' || asset.category === 'Komoditas & Forex' || asset.category === 'Crypto';
     }
 
     return matchesSearch && matchesCategory;
@@ -346,8 +407,8 @@ export function SearchPage({ onOpenProfile }: { onOpenProfile?: () => void }) {
             type="text" 
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Cari simbol aset (BTC, NVDA, Gold, ETH...)" 
-            className="flex-1 bg-transparent text-xs text-gray-800 outline-none placeholder:text-gray-400" 
+            placeholder="Cari simbol saham (BBCA, BBRI, NVDA, BTC...)" 
+            className="flex-1 bg-transparent text-xs text-gray-800 outline-none placeholder:text-gray-400 font-medium" 
           />
         </div>
       </header>
@@ -367,7 +428,10 @@ export function SearchPage({ onOpenProfile }: { onOpenProfile?: () => void }) {
               activeTab === tab ? "text-[#00B26A]" : "text-gray-400"
             )}
           >
-            {tab}
+            {tab === 'MARKET' ? 'SAHAM IDX' : tab}
+            {tab === 'MARKET' && (
+              <span className="absolute top-1 right-0 rounded bg-blue-600 px-1 py-[1px] text-[8px] font-bold text-white">Live</span>
+            )}
             {tab === 'GLOBAL' && (
               <span className="absolute top-1 right-1 rounded bg-[#00B26A] px-1 py-[1px] text-[8px] font-bold text-white">Live</span>
             )}
@@ -379,34 +443,49 @@ export function SearchPage({ onOpenProfile }: { onOpenProfile?: () => void }) {
       </div>
 
       <div className="flex-1 overflow-y-auto no-scrollbar pb-10">
-        {/* Index Card - Bitcoin Real-time */}
-        <div className="py-4 cursor-pointer hover:bg-slate-50/50 transition-colors" onClick={() => setSelectedAsset('BTCUSDT')}>
-          <div className="flex items-center justify-between mb-4 px-4">
-            <div className="flex items-center gap-2">
+        {/* Featured Live Chart Card (BTC/USD Live Real-time) */}
+        <div className="py-4 cursor-pointer hover:bg-slate-50/50 transition-colors">
+          <div className="flex items-center justify-between mb-3 px-4">
+            <div className="flex items-center gap-2" onClick={() => setSelectedAsset(featuredAsset === 'BBCA' ? 'BBCA' : 'BTCUSDT')}>
               <div className="flex items-center rounded overflow-hidden shadow-2xs">
-                <div className={cn("w-1.5 h-[24px]", btcData.up ? "bg-[#00B26A]" : "bg-[#e11d48]")}></div>
-                <span className="bg-[#111827] px-2 text-xs font-black text-white h-[24px] flex items-center gap-1">
-                  BTC/USDT <span className="w-1.5 h-1.5 rounded-full bg-[#00B26A] animate-ping" />
+                <div className={cn("w-1.5 h-[24px]", headerAssetData.up ? "bg-[#00B26A]" : "bg-[#e11d48]")}></div>
+                <span className="bg-[#111827] px-2 text-xs font-black text-white h-[24px] flex items-center gap-1.5">
+                  {headerAssetData.symbol === 'BBCA' ? 'BBCA (IDX)' : 'BTC / USD'} 
+                  <span className="w-2 h-2 rounded-full bg-[#00B26A] animate-ping inline-block" />
                 </span>
               </div>
-              <span className="text-[17px] font-extrabold text-gray-900">{btcData.price}</span>
-              <span className={cn("text-xs font-bold", btcData.up ? "text-[#00B26A]" : "text-[#e11d48]")}>
-                {btcData.change} ({btcData.changePercent}%)
+              <span className="text-[17px] font-extrabold text-gray-900">
+                {headerAssetData.currency === 'IDR' ? `Rp ${headerAssetData.price}` : `$${headerAssetData.price}`}
+              </span>
+              <span className={cn("text-xs font-bold", headerAssetData.up ? "text-[#00B26A]" : "text-[#e11d48]")}>
+                {headerAssetData.change} ({headerAssetData.changePercent}%)
               </span>
             </div>
-            <div className="flex items-center gap-1.5 text-[12px] text-[#00B26A] font-bold bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-              <Activity className="h-3.5 w-3.5 animate-pulse" />
-              <span>Real-Time</span>
+
+            {/* Toggle BTC / BBCA */}
+            <div className="flex items-center gap-1 bg-gray-100 p-0.5 rounded-lg">
+              <button 
+                onClick={(e) => { e.stopPropagation(); setFeaturedAsset('BTCUSDT'); }}
+                className={cn("px-2 py-0.5 text-[10px] font-bold rounded-md transition-all", featuredAsset === 'BTCUSDT' ? "bg-white text-[#F7931A] shadow-2xs" : "text-gray-500")}
+              >
+                BTC/USD
+              </button>
+              <button 
+                onClick={(e) => { e.stopPropagation(); setFeaturedAsset('BBCA'); }}
+                className={cn("px-2 py-0.5 text-[10px] font-bold rounded-md transition-all", featuredAsset === 'BBCA' ? "bg-white text-blue-700 shadow-2xs" : "text-gray-500")}
+              >
+                BBCA
+              </button>
             </div>
           </div>
 
-          <div className="h-[200px] w-full relative">
+          <div className="h-[200px] w-full relative" onClick={() => setSelectedAsset(featuredAsset === 'BBCA' ? 'BBCA' : 'BTCUSDT')}>
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={chartData} margin={{ top: 5, right: 40, left: 0, bottom: 5 }}>
                 <defs>
                   <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor={btcData.up ? "#00B26A" : "#e11d48"} stopOpacity={0.15}/>
-                    <stop offset="95%" stopColor={btcData.up ? "#00B26A" : "#e11d48"} stopOpacity={0}/>
+                    <stop offset="5%" stopColor={headerAssetData.up ? "#00B26A" : "#e11d48"} stopOpacity={0.15}/>
+                    <stop offset="95%" stopColor={headerAssetData.up ? "#00B26A" : "#e11d48"} stopOpacity={0}/>
                   </linearGradient>
                 </defs>
                 <YAxis 
@@ -416,12 +495,12 @@ export function SearchPage({ onOpenProfile }: { onOpenProfile?: () => void }) {
                   axisLine={false}
                   tickLine={false}
                   dx={8}
-                  tickFormatter={(val) => val.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                  tickFormatter={(val) => headerAssetData.currency === 'IDR' ? Math.round(val).toLocaleString('id-ID') : val.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                 />
                 <Area 
                   type="monotone" 
                   dataKey="value" 
-                  stroke={btcData.up ? "#00B26A" : "#e11d48"} 
+                  stroke={headerAssetData.up ? "#00B26A" : "#e11d48"} 
                   strokeWidth={2} 
                   fillOpacity={1} 
                   fill="url(#colorValue)" 
@@ -434,26 +513,26 @@ export function SearchPage({ onOpenProfile }: { onOpenProfile?: () => void }) {
 
           <div className="mt-4 flex gap-2 px-4">
             <div className="flex-1 rounded-lg border border-gray-100 p-2.5 bg-gray-50/50">
-              <p className="font-bold text-gray-500 mb-1.5 text-[10px] tracking-wider uppercase">Intraday BTC</p>
+              <p className="font-bold text-gray-500 mb-1.5 text-[10px] tracking-wider uppercase">Intraday {headerAssetData.symbol}</p>
               <div className="flex flex-col gap-1 text-[11px]">
-                <div className="flex justify-between"><span className="text-gray-500">Open</span><span className="text-gray-900 font-bold">{btcData.open}</span></div>
-                <div className="flex justify-between"><span className="text-gray-500">High</span><span className="text-[#00B26A] font-bold">{btcData.high}</span></div>
-                <div className="flex justify-between"><span className="text-gray-500">Low</span><span className="text-[#e11d48] font-bold">{btcData.low}</span></div>
+                <div className="flex justify-between"><span className="text-gray-500">Open</span><span className="text-gray-900 font-bold">{headerAssetData.open}</span></div>
+                <div className="flex justify-between"><span className="text-gray-500">High</span><span className="text-[#00B26A] font-bold">{headerAssetData.high}</span></div>
+                <div className="flex justify-between"><span className="text-gray-500">Low</span><span className="text-[#e11d48] font-bold">{headerAssetData.low}</span></div>
               </div>
             </div>
             <div className="flex-[2] rounded-lg border border-gray-100 p-2.5 bg-gray-50/50 flex">
               <div className="flex-1 pr-2">
                 <p className="font-bold text-gray-500 mb-1.5 text-[10px] tracking-wider uppercase">Volume</p>
                 <div className="flex flex-col gap-1 text-[11px]">
-                  <div className="flex justify-between"><span className="text-gray-500">Vol</span><span className="text-gray-900 font-bold">{btcData.vol}</span></div>
-                  <div className="flex justify-between"><span className="text-gray-500">Value</span><span className="text-gray-900 font-bold">${btcData.quoteVol}</span></div>
+                  <div className="flex justify-between"><span className="text-gray-500">Vol</span><span className="text-gray-900 font-bold">{headerAssetData.vol}</span></div>
+                  <div className="flex justify-between"><span className="text-gray-500">Value</span><span className="text-gray-900 font-bold">{headerAssetData.quoteVol}</span></div>
                 </div>
               </div>
               <div className="flex-1 pl-2 border-l border-gray-200">
                 <p className="font-bold text-gray-500 mb-1.5 text-[10px] tracking-wider uppercase">Pasar</p>
                 <div className="flex flex-col gap-1 text-[11px]">
-                  <div className="flex justify-between"><span className="text-gray-500">Freq</span><span className="text-gray-900 font-bold">{btcData.freq}</span></div>
-                  <div className="flex justify-between"><span className="text-gray-500">Tipe</span><span className="text-[#00B26A] font-bold">24H Live</span></div>
+                  <div className="flex justify-between"><span className="text-gray-500">Freq</span><span className="text-gray-900 font-bold">{headerAssetData.freq}</span></div>
+                  <div className="flex justify-between"><span className="text-gray-500">Bursa</span><span className="text-[#00B26A] font-bold">{headerAssetData.symbol === 'BBCA' ? 'BEI / IDX' : '24H Live'}</span></div>
                 </div>
               </div>
             </div>
@@ -465,7 +544,11 @@ export function SearchPage({ onOpenProfile }: { onOpenProfile?: () => void }) {
           {shortcuts.map((sc) => {
             const Icon = sc.icon;
             return (
-              <div key={sc.id} className="flex flex-col items-center gap-2 min-w-[64px] relative cursor-pointer hover:opacity-80 transition-opacity">
+              <div 
+                key={sc.id} 
+                onClick={() => setActiveScreen(sc.id)}
+                className="flex flex-col items-center gap-2 min-w-[64px] relative cursor-pointer hover:opacity-80 transition-opacity"
+              >
                 <div className={cn("flex h-12 w-12 items-center justify-center rounded-full text-xl shadow-2xs", sc.bg)}>
                   <Icon className={cn("h-5 w-5", sc.color)} strokeWidth={1.8} />
                 </div>
@@ -478,10 +561,10 @@ export function SearchPage({ onOpenProfile }: { onOpenProfile?: () => void }) {
           })}
         </div>
 
-        {/* Category Filter Chips for Global Assets */}
+        {/* Category Filter Chips */}
         <div className="bg-gray-50 px-4 py-3 border-y border-gray-100 flex items-center justify-between">
           <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
-            {(['Semua', 'Crypto', 'Saham Global', 'Komoditas & Forex'] as const).map((cat) => (
+            {(['Semua', 'Saham IDX', 'Saham Global', 'Crypto', 'Komoditas & Forex'] as const).map((cat) => (
               <button
                 key={cat}
                 onClick={() => setCategoryFilter(cat)}
@@ -498,18 +581,19 @@ export function SearchPage({ onOpenProfile }: { onOpenProfile?: () => void }) {
           </div>
         </div>
 
-        {/* Global Asset List */}
+        {/* Asset List */}
         <div className="px-4 py-2 flex flex-col gap-1 pb-24">
           <div className="flex items-center justify-between text-[11px] font-bold text-gray-400 py-2 px-2 border-b border-gray-100">
-            <span>ASET GLOBAL ({filteredAssets.length})</span>
+            <span>DAFTAR SAHAM & ASET ({filteredAssets.length})</span>
             <span>HARGA & PERUBAHAN LIVE</span>
           </div>
 
           {filteredAssets.map((asset) => {
             const displaySym = asset.symbol.replace('USDT', '');
+            const isIdr = asset.currency === 'IDR' || isIDXStock(asset.symbol);
             const data = assetPrices[asset.symbol] || { 
-              price: asset.basePrice ? asset.basePrice.toString() : '-', 
-              change: '0.00', 
+              price: asset.basePrice ? (isIdr ? asset.basePrice.toLocaleString('id-ID') : asset.basePrice.toString()) : '-', 
+              change: '0', 
               pct: '0.00%', 
               up: true 
             };
@@ -518,24 +602,25 @@ export function SearchPage({ onOpenProfile }: { onOpenProfile?: () => void }) {
               <div 
                 key={asset.symbol} 
                 onClick={() => setSelectedAsset(asset.symbol)}
-                className="flex items-center justify-between py-3 border-b border-gray-100 last:border-0 hover:bg-emerald-50/40 rounded-xl px-2 transition-all cursor-pointer group"
+                className={cn(
+                  "flex items-center justify-between py-3 border-b border-gray-100 last:border-0 rounded-xl px-2 transition-all cursor-pointer group",
+                  asset.symbol === 'BBCA' ? "bg-blue-50/40 hover:bg-blue-50/70" : "hover:bg-emerald-50/40"
+                )}
               >
                 <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white shadow-2xs border border-gray-100 p-1.5 overflow-hidden group-hover:scale-105 transition-transform">
-                    <img 
-                      src={asset.logo} 
-                      alt={asset.name} 
-                      className="w-full h-full object-contain"
-                      onError={(e) => {
-                        // Fallback badge if image fails
-                        (e.target as HTMLElement).style.display = 'none';
-                      }}
-                    />
-                  </div>
+                  <AssetLogo symbol={asset.symbol} size="md" className="group-hover:scale-105 transition-transform" />
                   <div>
                     <div className="flex items-center gap-1.5">
-                      <h4 className="text-sm font-extrabold text-gray-900">{displaySym}</h4>
-                      <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-gray-100 text-gray-500">
+                      <h4 className="text-sm font-extrabold text-gray-900 flex items-center gap-1">
+                        {displaySym}
+                        {asset.symbol === 'BBCA' && (
+                          <span className="px-1.5 py-0.2 bg-blue-100 text-blue-700 text-[9px] font-black rounded">Top Bank</span>
+                        )}
+                      </h4>
+                      <span className={cn(
+                        "text-[9px] font-bold px-1.5 py-0.2 rounded",
+                        asset.category === 'Saham IDX' ? "bg-blue-50 text-blue-700 border border-blue-200" : "bg-gray-100 text-gray-500"
+                      )}>
                         {asset.category}
                       </span>
                     </div>
@@ -545,7 +630,7 @@ export function SearchPage({ onOpenProfile }: { onOpenProfile?: () => void }) {
 
                 <div className="text-right">
                   <p className="text-sm font-black text-gray-900">
-                    ${data.price}
+                    {isIdr ? `Rp ${data.price}` : `$${data.price}`}
                   </p>
                   <div className={cn(
                     "inline-flex items-center gap-0.5 text-[11px] font-bold px-1.5 py-0.5 rounded-md mt-0.5",

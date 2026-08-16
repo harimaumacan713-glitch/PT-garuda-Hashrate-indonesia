@@ -2,8 +2,9 @@ import React, { useState } from 'react';
 import { ChevronLeft, History, Headphones, ChevronRight, Info, Landmark, ArrowRightLeft, ShieldCheck } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAuth } from '../contexts/AuthContext';
+import { useNotification } from '../contexts/NotificationContext';
 import { db } from '../lib/firebase';
-import { ref, get, set, serverTimestamp, runTransaction, push } from 'firebase/database';
+import { ref, get, set, onValue, serverTimestamp, runTransaction, push } from 'firebase/database';
 import { cn } from '../lib/utils';
 
 type WithdrawPageProps = {
@@ -12,6 +13,8 @@ type WithdrawPageProps = {
 
 export function WithdrawPage({ onBack }: WithdrawPageProps) {
   const { user } = useAuth();
+  const { showPushNotification } = useNotification();
+  const activeUid = user?.uid || 'demo_user';
   const [amount, setAmount] = useState('');
   const [withdrawAll, setWithdrawAll] = useState(false);
   const [step, setStep] = useState<'input' | 'confirm' | 'process'>('input');
@@ -34,45 +37,48 @@ export function WithdrawPage({ onBack }: WithdrawPageProps) {
   const [editAccHolder, setEditAccHolder] = useState('');
 
   React.useEffect(() => {
-    if (user) {
-      // 1. Fetch balance
-      const balanceRef = ref(db, `users/${user.uid}/balance`);
-      get(balanceRef).then((snapshot) => {
-        if (snapshot.exists()) {
-          setWithdrawableBalance(snapshot.val());
-        } else {
-          const initialBalance = 10000000;
-          set(balanceRef, initialBalance);
-          setWithdrawableBalance(initialBalance);
-        }
-      }).catch(console.error);
+    // 1. Fetch balance in realtime
+    const balanceRef = ref(db, `users/${activeUid}/balance`);
+    const unsubscribeBal = onValue(balanceRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const val = snapshot.val();
+        setWithdrawableBalance(typeof val === 'number' ? val : Number(val) || 0);
+      } else {
+        const initialBalance = 0;
+        set(balanceRef, initialBalance).catch(console.error);
+        setWithdrawableBalance(initialBalance);
+      }
+    });
 
-      // 2. Fetch or initialize Bank Account
-      const bankRef = ref(db, `users/${user.uid}/bankAccount`);
-      get(bankRef).then((snapshot) => {
-        if (snapshot.exists()) {
-          const data = snapshot.val();
-          setBankAccount(data);
-          setEditBankName(data.bankName || 'JAGO');
-          setEditAccNum(data.accountNumber || '');
-          setEditAccHolder(data.accountHolder || '');
-        } else {
-          const defaultHolder = (user.displayName || user.email?.split('@')[0] || 'INVESTOR').toUpperCase();
-          const defaultAccNum = `103${Math.floor(100000000 + Math.random() * 900000000)}`;
-          const defaultBank = {
-            bankName: 'JAGO',
-            accountNumber: defaultAccNum,
-            accountHolder: defaultHolder
-          };
-          set(bankRef, defaultBank).catch(console.error);
-          setBankAccount(defaultBank);
-          setEditBankName('JAGO');
-          setEditAccNum(defaultAccNum);
-          setEditAccHolder(defaultHolder);
-        }
-      }).catch(console.error);
-    }
-  }, [user]);
+    // 2. Fetch or initialize Bank Account
+    const bankRef = ref(db, `users/${activeUid}/bankAccount`);
+    get(bankRef).then((snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.val();
+        setBankAccount(data);
+        setEditBankName(data.bankName || 'JAGO');
+        setEditAccNum(data.accountNumber || '');
+        setEditAccHolder(data.accountHolder || '');
+      } else {
+        const defaultHolder = (user?.displayName || user?.email?.split('@')[0] || 'INVESTOR').toUpperCase();
+        const defaultAccNum = `103${Math.floor(100000000 + Math.random() * 900000000)}`;
+        const defaultBank = {
+          bankName: 'JAGO',
+          accountNumber: defaultAccNum,
+          accountHolder: defaultHolder
+        };
+        set(bankRef, defaultBank).catch(console.error);
+        setBankAccount(defaultBank);
+        setEditBankName('JAGO');
+        setEditAccNum(defaultAccNum);
+        setEditAccHolder(defaultHolder);
+      }
+    }).catch(console.error);
+
+    return () => {
+      unsubscribeBal();
+    };
+  }, [activeUid, user]);
 
   const handleSaveBank = async () => {
     if (!user) return;
@@ -128,7 +134,7 @@ export function WithdrawPage({ onBack }: WithdrawPageProps) {
     setErrorMsg(null);
     
     try {
-      const userBalanceRef = ref(db, `users/${user.uid}/balance`);
+      const userBalanceRef = ref(db, `users/${activeUid}/balance`);
       
       // Atomic deduction from Project 1
       const transactionResult = await runTransaction(userBalanceRef, (currentBalance) => {
@@ -144,7 +150,7 @@ export function WithdrawPage({ onBack }: WithdrawPageProps) {
         const newP1Balance = transactionResult.snapshot.val();
         
         // Sync wallet balance node
-        await set(ref(db, `wallets/${user.uid}/balance`), newP1Balance).catch(console.error);
+        await set(ref(db, `wallets/${activeUid}/balance`), newP1Balance).catch(console.error);
 
         // Generate unique transaction ID
         const rawKey = push(ref(db, 'temp')).key || 'ABC';
@@ -155,7 +161,7 @@ export function WithdrawPage({ onBack }: WithdrawPageProps) {
           // Save transaction log for Project 2 (Bank Jago) in requested Indonesian format
           const project2TxData = {
             transactionId: txKey,
-            userId: user.uid,
+            userId: activeUid,
             type: "tarik",
             sumber: "garuda_invest",
             tujuan: "jago",
@@ -166,7 +172,7 @@ export function WithdrawPage({ onBack }: WithdrawPageProps) {
 
           // Save transaction log for Project 1 (Garuda Inves) in original format for UI history
           const project1TxData = {
-            userId: user.uid,
+            userId: activeUid,
             transactionId: txKey,
             type: "withdraw_project2",
             source: "garuda_inves",
@@ -178,15 +184,15 @@ export function WithdrawPage({ onBack }: WithdrawPageProps) {
           };
 
           // Simpan ke path khusus untuk Project 2 Bank Jago
-          await set(ref(db, `pengguna/${user.uid}/transaksi/${txKey}`), project2TxData);
+          await set(ref(db, `pengguna/${activeUid}/transaksi/${txKey}`), project2TxData);
           
           // Simpan ke path history Project 1 (UI)
-          await set(ref(db, `users/${user.uid}/transactions/${txKey}`), project1TxData);
-          await set(ref(db, `users/${user.uid}/withdrawals/${txKey}`), project1TxData);
+          await set(ref(db, `users/${activeUid}/transactions/${txKey}`), project1TxData);
+          await set(ref(db, `users/${activeUid}/withdrawals/${txKey}`), project1TxData);
         } else {
           // Bank withdrawal transaction
           const txData = {
-            userId: user.uid,
+            userId: activeUid,
             transactionId: txKey,
             type: "withdraw",
             source: "garuda_inves",
@@ -198,12 +204,25 @@ export function WithdrawPage({ onBack }: WithdrawPageProps) {
             createdAt: serverTimestamp(),
             timestamp: Date.now()
           };
-          await set(ref(db, `users/${user.uid}/transactions/${txKey}`), txData);
-          await set(ref(db, `users/${user.uid}/withdrawals/${txKey}`), txData);
+          await set(ref(db, `users/${activeUid}/transactions/${txKey}`), txData);
+          await set(ref(db, `users/${activeUid}/withdrawals/${txKey}`), txData);
         }
 
         setWithdrawableBalance(newP1Balance);
         setStep('process');
+
+        // Trigger Phone Push Notification
+        const destTitle = withdrawDestination === 'project2' 
+          ? 'Bank Jago (Project 2)' 
+          : `${bankAccount.bankName} (${bankAccount.accountNumber})`;
+
+        showPushNotification({
+          title: 'Penarikan Dana Berhasil',
+          message: `Penarikan saldo sebesar Rp ${numericAmount.toLocaleString('id-ID')} ke ${destTitle} telah berhasil diproses.`,
+          type: 'withdraw',
+          amount: numericAmount,
+          destination: destTitle
+        });
       } else {
         setErrorMsg('Penarikan gagal: Saldo tidak mencukupi.');
         setStep('input');
@@ -305,14 +324,21 @@ export function WithdrawPage({ onBack }: WithdrawPageProps) {
               className={cn(
                 "p-3 rounded-xl border text-xs font-bold flex flex-col items-center gap-1.5 transition-all text-center",
                 withdrawDestination === 'project2' 
-                  ? "border-[#00B26A] bg-emerald-50/60 text-[#00B26A] shadow-sm ring-1 ring-[#00B26A]" 
+                  ? "border-[#f58220] bg-orange-50/60 text-orange-800 shadow-sm ring-1 ring-[#f58220]" 
                   : "border-gray-200 text-gray-600 hover:bg-gray-50"
               )}
             >
-              <div className="w-7 h-7 rounded-full bg-[#00B26A] text-white flex items-center justify-center font-bold text-xs shadow-sm">
-                P2
+              <div className="w-7 h-7 rounded-lg bg-[#f58220] text-white flex items-center justify-center font-bold text-xs shadow-sm">
+                <div className="flex flex-col items-center justify-center">
+                  <div className="flex gap-[1px] mb-[1px]">
+                    <div className="w-1 h-1 bg-white rounded-full"></div>
+                    <div className="w-1 h-1 bg-white rounded-full"></div>
+                    <div className="w-1 h-1 bg-white rounded-full"></div>
+                  </div>
+                  <span className="text-white font-black text-xs leading-none tracking-tighter">J</span>
+                </div>
               </div>
-              <span>Withdraw ke Project 2</span>
+              <span>Bank Jago (Project 2)</span>
             </button>
 
             <button
@@ -334,15 +360,22 @@ export function WithdrawPage({ onBack }: WithdrawPageProps) {
 
           {/* Destination Card Detail */}
           {withdrawDestination === 'project2' ? (
-            <div className="border border-emerald-200 rounded-xl p-4 flex items-center justify-between bg-emerald-50/30">
+            <div className="border border-orange-200 rounded-xl p-4 flex items-center justify-between bg-orange-50/30">
               <div className="flex items-center gap-3.5">
-                <div className="w-11 h-11 bg-[#00B26A] rounded-full flex items-center justify-center shrink-0 text-white font-bold text-sm shadow-sm">
-                  P2
+                <div className="w-11 h-11 bg-[#f58220] rounded-xl flex items-center justify-center shrink-0 text-white font-bold text-base shadow-sm">
+                  <div className="flex flex-col items-center justify-center">
+                    <div className="flex gap-0.5 mb-0.5">
+                      <div className="w-1.5 h-1.5 bg-white rounded-full"></div>
+                      <div className="w-1.5 h-1.5 bg-white rounded-full"></div>
+                      <div className="w-1.5 h-1.5 bg-white rounded-full"></div>
+                    </div>
+                    <span className="text-white font-black text-xl leading-none tracking-tighter">J</span>
+                  </div>
                 </div>
                 <div className="flex flex-col">
                   <div className="flex items-center gap-1.5 mb-0.5">
-                    <span className="text-[13px] font-bold text-gray-900">Project 2</span>
-                    <span className="bg-emerald-100 text-[#00B26A] text-[9px] font-extrabold px-1.5 py-0.5 rounded uppercase">Otomatis UID</span>
+                    <span className="text-[13px] font-bold text-gray-900">Bank Jago (Project 2)</span>
+                    <span className="bg-orange-100 text-orange-700 text-[9px] font-extrabold px-1.5 py-0.5 rounded uppercase">Otomatis UID</span>
                   </div>
                   <span className="text-[11px] font-mono text-gray-600 tracking-tight">UID: {user?.uid || '-'}</span>
                   <span className="text-[10px] text-gray-500">Penerima Otomatis (Akun Project 2 Saya)</span>
@@ -501,14 +534,21 @@ export function WithdrawPage({ onBack }: WithdrawPageProps) {
                         Transfer ke
                       </label>
                       {withdrawDestination === 'project2' ? (
-                        <div className="border border-emerald-200 rounded-lg p-4 flex items-center gap-4 bg-emerald-50/40 shadow-sm">
-                          <div className="w-12 h-12 bg-[#00B26A] rounded-full flex items-center justify-center shrink-0 text-white font-bold text-base shadow-sm">
-                            P2
+                        <div className="border border-orange-200 rounded-lg p-4 flex items-center gap-4 bg-orange-50/40 shadow-sm">
+                          <div className="w-12 h-12 bg-[#f58220] rounded-xl flex items-center justify-center shrink-0 text-white font-bold text-base shadow-sm">
+                            <div className="flex flex-col items-center justify-center">
+                              <div className="flex gap-0.5 mb-0.5">
+                                <div className="w-1.5 h-1.5 bg-white rounded-full"></div>
+                                <div className="w-1.5 h-1.5 bg-white rounded-full"></div>
+                                <div className="w-1.5 h-1.5 bg-white rounded-full"></div>
+                              </div>
+                              <span className="text-white font-black text-xl leading-none tracking-tighter">J</span>
+                            </div>
                           </div>
                           <div className="flex flex-col">
                             <div className="flex items-center gap-1.5 mb-0.5">
-                              <span className="text-[14px] font-bold text-gray-900">Project 2</span>
-                              <span className="bg-emerald-100 text-[#00B26A] text-[9px] font-extrabold px-1.5 py-0.5 rounded">Otomatis UID</span>
+                              <span className="text-[14px] font-bold text-gray-900">Bank Jago (Project 2)</span>
+                              <span className="bg-orange-100 text-orange-700 text-[9px] font-extrabold px-1.5 py-0.5 rounded">Otomatis UID</span>
                             </div>
                             <span className="text-[12px] font-mono text-gray-700 tracking-tight">UID: {user?.uid || '-'}</span>
                             <span className="text-[11px] text-gray-500">Penerima: Akun Saya di Project 2</span>

@@ -13,11 +13,25 @@ import { PortfolioPage } from './pages/PortfolioPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { WelcomePage } from './pages/WelcomePage';
 import { useAuth } from './contexts/AuthContext';
+import { useDepositListener } from './hooks/useDepositListener';
+import { NotificationProvider } from './contexts/NotificationContext';
+import { PhonePushNotification } from './components/PhonePushNotification';
 
 export default function App() {
+  return (
+    <NotificationProvider>
+      <AppContent />
+    </NotificationProvider>
+  );
+}
+
+function AppContent() {
   const [activeTab, setActiveTab] = useState('stream');
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const { user, loading } = useAuth();
+
+  // Background listener for incoming QR deposits
+  useDepositListener(user ? user.uid : null);
 
   if (loading) {
     return (
@@ -74,6 +88,9 @@ export default function App() {
             </motion.div>
           )}
         </AnimatePresence>
+
+        {/* Global Phone Push Notification Banner (Top of Phone) */}
+        <PhonePushNotification />
     </div>
   );
 }

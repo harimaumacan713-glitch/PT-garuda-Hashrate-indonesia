@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { Activity } from 'lucide-react';
-import { auth, googleProvider } from '../lib/firebase';
+import { auth, googleProvider, db } from '../lib/firebase';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signInWithPopup } from 'firebase/auth';
+import { ref, get, set } from 'firebase/database';
 import { cn } from '../lib/utils';
 
 interface WelcomePageProps {
@@ -17,6 +18,9 @@ export function WelcomePage({ onLogin }: WelcomePageProps) {
 
   const formatAuthError = (err: any) => {
     const msg = err.message || '';
+    if (msg.includes('auth/unauthorized-domain')) {
+      return 'Domain aplikasi ini belum diotorisasi di Firebase Console untuk Google Sign-In. Silakan gunakan Masuk / Daftar dengan Email & Password di bawah ini.';
+    }
     if (msg.includes('auth/email-already-in-use')) return 'Email ini sudah terdaftar. Silakan masuk.';
     if (msg.includes('auth/invalid-email')) return 'Format email tidak valid.';
     if (msg.includes('auth/weak-password')) return 'Password terlalu lemah, minimal 6 karakter.';
@@ -26,11 +30,39 @@ export function WelcomePage({ onLogin }: WelcomePageProps) {
     return msg || 'Gagal melakukan autentikasi';
   };
 
+  const ensureUserInitialState = async (uid: string, userDisplayName?: string | null) => {
+    try {
+      const balanceRef = ref(db, `users/${uid}/balance`);
+      const balSnap = await get(balanceRef);
+      if (!balSnap.exists()) {
+        await set(balanceRef, 0);
+        await set(ref(db, `wallets/${uid}/balance`), 0);
+      }
+      
+      const profileRef = ref(db, `users/${uid}/profileData`);
+      const profSnap = await get(profileRef);
+      if (!profSnap.exists()) {
+        const name = userDisplayName || email.split('@')[0] || 'Investor';
+        await set(profileRef, {
+          displayName: name,
+          username: name.toLowerCase().replace(/\s+/g, '') + Math.floor(100 + Math.random() * 900),
+          website: '',
+          biography: '',
+          gender: 'Laki-laki',
+          createdAt: Date.now()
+        });
+      }
+    } catch (e) {
+      console.error('Error initializing user state in database:', e);
+    }
+  };
+
   const handleEmailLogin = async () => {
     try {
       setLoading(true);
       setError('');
-      await signInWithEmailAndPassword(auth, email, password);
+      const cred = await signInWithEmailAndPassword(auth, email, password);
+      await ensureUserInitialState(cred.user.uid, cred.user.displayName);
       onLogin();
     } catch (err: any) {
       setError(formatAuthError(err));
@@ -43,7 +75,11 @@ export function WelcomePage({ onLogin }: WelcomePageProps) {
     try {
       setLoading(true);
       setError('');
-      await createUserWithEmailAndPassword(auth, email, password);
+      const cred = await createUserWithEmailAndPassword(auth, email, password);
+      // Explicitly set initial balance to 0 for new user
+      await set(ref(db, `users/${cred.user.uid}/balance`), 0);
+      await set(ref(db, `wallets/${cred.user.uid}/balance`), 0);
+      await ensureUserInitialState(cred.user.uid, cred.user.displayName);
       onLogin();
     } catch (err: any) {
       setError(formatAuthError(err));
@@ -56,7 +92,8 @@ export function WelcomePage({ onLogin }: WelcomePageProps) {
     try {
       setLoading(true);
       setError('');
-      await signInWithPopup(auth, googleProvider);
+      const cred = await signInWithPopup(auth, googleProvider);
+      await ensureUserInitialState(cred.user.uid, cred.user.displayName);
       onLogin();
     } catch (err: any) {
       setError(formatAuthError(err));
@@ -205,8 +242,8 @@ export function WelcomePage({ onLogin }: WelcomePageProps) {
       {/* Header */}
       <div className="flex items-center justify-between px-6 py-6 pt-12 z-10">
         <div className="flex items-center gap-2">
-          <img src="/logo.jpg" alt="Garuda Invest" className="w-8 h-8 rounded object-cover shadow-sm" />
-          <span className="font-bold text-xl tracking-tight text-gray-900">Garuda Invest</span>
+          <img src="/logo.jpg" alt="P-Stock Sekuritas" className="w-8 h-8 rounded object-cover shadow-sm" />
+          <span className="font-bold text-lg tracking-tight text-gray-900">P-Stock Sekuritas</span>
         </div>
         {/* Indonesian flag mock */}
         <div className="flex items-center justify-center bg-gray-100 rounded-full w-12 h-6 border border-gray-200">
@@ -252,7 +289,7 @@ export function WelcomePage({ onLogin }: WelcomePageProps) {
 
       {/* Text Content */}
       <div className="px-8 text-center mt-12 mb-8">
-        <h2 className="text-2xl font-bold text-gray-900 mb-3">Beli Saham di Garuda Invest Aja</h2>
+        <h2 className="text-2xl font-bold text-gray-900 mb-3">Beli Saham di P-Stock Sekuritas Aja</h2>
         <p className="text-[13px] text-gray-500 leading-relaxed max-w-[240px] mx-auto">
           Swipe. Order. Done. Semudah itu.
           Tanpa harus baca manual.

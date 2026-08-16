@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { User, onAuthStateChanged, signInAnonymously } from 'firebase/auth';
-import { auth } from '../lib/firebase';
+import { auth, initializeFirebase } from '../lib/firebase';
 
 interface AuthContextType {
   user: User | null;
@@ -16,6 +16,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    try {
+      initializeFirebase();
+    } catch (e) {
+      console.error('Firebase initialization error:', e);
+    }
+
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       setUser(user);
       setLoading(false);
@@ -30,3 +36,4 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     </AuthContext.Provider>
   );
 };
+

@@ -1,11 +1,15 @@
-import React, { useState, useEffect } from 'react';
-import { ChevronRight, RefreshCcw, TrendingUp, TrendingDown, ArrowUpRight, Activity } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { ChevronRight, RefreshCcw, TrendingUp, TrendingDown, ArrowUpRight, Activity, Search, ChevronDown } from 'lucide-react';
 import { cn, getEffectiveLivePrice } from '../lib/utils';
 import { useAuth } from '../contexts/AuthContext';
 import { db } from '../lib/firebase';
 import { ref, onValue, set } from 'firebase/database';
 import { BuyOrderPage } from './BuyOrderPage';
 import { AssetDetailsPage } from './AssetDetailsPage';
+import { PortfolioDetailPage } from './PortfolioDetailPage';
+import { AssetLogo } from '../components/AssetLogo';
+import { MyInvestmentCard } from '../components/MyInvestmentCard';
+import { getAssetName, isIDXStock } from '../lib/assetsData';
 
 interface PositionItem {
   symbol: string;
@@ -67,6 +71,16 @@ const assetLogos: Record<string, string> = {
   'LTCUSDT': 'https://cryptologos.cc/logos/litecoin-ltc-logo.png',
   'UNI': 'https://cryptologos.cc/logos/uniswap-uni-logo.png',
   'UNIUSDT': 'https://cryptologos.cc/logos/uniswap-uni-logo.png',
+  'ARB': 'https://cryptologos.cc/logos/arbitrum-arb-logo.png',
+  'ARBUSDT': 'https://cryptologos.cc/logos/arbitrum-arb-logo.png',
+  'OP': 'https://cryptologos.cc/logos/optimism-ethereum-op-logo.png',
+  'OPUSDT': 'https://cryptologos.cc/logos/optimism-ethereum-op-logo.png',
+  'RENDER': 'https://cryptologos.cc/logos/render-token-rndr-logo.png',
+  'RENDERUSDT': 'https://cryptologos.cc/logos/render-token-rndr-logo.png',
+  'FET': 'https://cryptologos.cc/logos/artificial-superintelligence-alliance-fet-logo.png',
+  'FETUSDT': 'https://cryptologos.cc/logos/artificial-superintelligence-alliance-fet-logo.png',
+  'INJ': 'https://cryptologos.cc/logos/injective-inj-logo.png',
+  'INJUSDT': 'https://cryptologos.cc/logos/injective-inj-logo.png',
 
   // SAHAM GLOBAL
   'NVDA': 'https://upload.wikimedia.org/wikipedia/commons/2/21/Nvidia_logo.svg',
@@ -80,6 +94,13 @@ const assetLogos: Record<string, string> = {
   'AMD': 'https://upload.wikimedia.org/wikipedia/commons/7/7c/AMD_Logo.svg',
   'INTC': 'https://upload.wikimedia.org/wikipedia/commons/7/7d/Intel_logo_%282020%29.svg',
   'COIN': 'https://upload.wikimedia.org/wikipedia/commons/5/50/Coinbase_Logo_2019.svg',
+  'JPM': 'https://upload.wikimedia.org/wikipedia/commons/f/f8/JPMorgan_Chase_Logo.svg',
+  'V': 'https://upload.wikimedia.org/wikipedia/commons/5/5e/Visa_Inc._logo.svg',
+  'MA': 'https://upload.wikimedia.org/wikipedia/commons/2/2a/Mastercard-logo.svg',
+  'WMT': 'https://upload.wikimedia.org/wikipedia/commons/c/ca/Walmart_logo.svg',
+  'DIS': 'https://upload.wikimedia.org/wikipedia/commons/1/1a/Walt_Disney_Company_logo.svg',
+  'KO': 'https://upload.wikimedia.org/wikipedia/commons/c/ce/Coca-Cola_logo.svg',
+  'PEP': 'https://upload.wikimedia.org/wikipedia/commons/a/a6/Logo_de_PepsiCo.svg',
 
   // KOMODITAS & FOREX
   'GOLD': 'https://cdn-icons-png.flaticon.com/512/2822/2822831.png',
@@ -92,162 +113,209 @@ const assetLogos: Record<string, string> = {
 };
 
 export function PortfolioPage({ onOpenProfile }: { onOpenProfile?: () => void }) {
-  const [activeTab, setActiveTab] = useState<'PORTFOLIO' | 'ORDER'>('PORTFOLIO');
+  const [activeTab, setActiveTab] = useState<'PORTFOLIO' | 'ORDER' | 'HISTORY'>('PORTFOLIO');
   const { user } = useAuth();
+  const activeUid = user?.uid || 'demo_user';
   const [balance, setBalance] = useState<number>(0);
   const [positions, setPositions] = useState<PositionItem[]>([]);
   const [orders, setOrders] = useState<OrderItem[]>([]);
+  const [transactions, setTransactions] = useState<any[]>([]);
+  const [historyFilter, setHistoryFilter] = useState<'ALL' | 'REALIZED'>('ALL');
+  const [historySearch, setHistorySearch] = useState('');
   const [showBuyPage, setShowBuyPage] = useState<string | null>(null);
+  const [selectedPortfolioAsset, setSelectedPortfolioAsset] = useState<string | null>(null);
 
-  // Live price state from Firebase assetPrices
+  // Live price state from Firebase assetPrices and live stream
   const [assetPrices, setAssetPrices] = useState<Record<string, number>>({});
-  // Price direction for visual tick flash: 'up' | 'down' | null
-  const [flashState, setFlashState] = useState<Record<string, 'up' | 'down' | null>>({});
+  const [priceFlash, setPriceFlash] = useState<Record<string, 'up' | 'down'>>({});
+  const prevPricesRef = useRef<Record<string, number>>({});
 
-  // Realtime balance, positions & asset prices listener
+  // 1. Initial & Continuous Global Quote Polling (/api/quotes) for all stocks, forex, crypto
   useEffect(() => {
-    if (user) {
-      // Balance
-      const balanceRef = ref(db, `users/${user.uid}/balance`);
-      const unsubscribeBal = onValue(balanceRef, (snapshot) => {
-        if (snapshot.exists()) {
-          setBalance(snapshot.val());
-        } else {
-          const initialBalance = 10000000;
-          set(balanceRef, initialBalance).catch(console.error);
-        }
-      });
+    let isMounted = true;
+    const fetchGlobalQuotes = async () => {
+      try {
+        const res = await fetch('/api/quotes');
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data && data.success && data.quotes && isMounted) {
+          const quotes = data.quotes;
+          const map: Record<string, number> = {};
+          const flashes: Record<string, 'up' | 'down'> = {};
 
-      // Asset Prices (Single Source of Truth)
-      const pricesRef = ref(db, 'assetPrices');
-      const unsubscribePrices = onValue(pricesRef, (snapshot) => {
-        if (snapshot.exists()) {
-          const data = snapshot.val();
-          const pricesMap: Record<string, number> = {};
-          Object.entries(data).forEach(([sym, val]: [string, any]) => {
-            const p = typeof val === 'object' ? val.price : Number(val);
-            pricesMap[sym] = p;
-            pricesMap[sym.toUpperCase().replace('USDT', '')] = p;
+          Object.entries(quotes).forEach(([sym, q]: [string, any]) => {
+            if (q && typeof q.price === 'number') {
+              map[sym] = q.price;
+              const cleanSym = sym.toUpperCase().replace('USDT', '');
+              map[cleanSym] = q.price;
+
+              const prevP = prevPricesRef.current[sym] || prevPricesRef.current[cleanSym];
+              if (prevP && prevP !== q.price) {
+                flashes[sym] = q.price > prevP ? 'up' : 'down';
+                flashes[cleanSym] = flashes[sym];
+              }
+            }
           });
-          setAssetPrices(pricesMap);
-        }
-      });
 
-      // Positions
-      const positionsRef = ref(db, `users/${user.uid}/positions`);
-      const unsubscribePos = onValue(positionsRef, (snapshot) => {
-        if (snapshot.exists()) {
-          const data = snapshot.val();
-          const list: PositionItem[] = Object.values(data);
-          setPositions(list);
-        } else {
-          setPositions([]);
-        }
-      });
-
-      // Orders
-      const ordersRef = ref(db, `users/${user.uid}/orders`);
-      const unsubscribeOrd = onValue(ordersRef, (snapshot) => {
-        if (snapshot.exists()) {
-          const data = snapshot.val();
-          const list: OrderItem[] = Object.values(data);
-          setOrders(list.reverse()); // most recent first
-        } else {
-          setOrders([]);
-        }
-      });
-
-      return () => {
-        unsubscribeBal();
-        unsubscribePrices();
-        unsubscribePos();
-        unsubscribeOrd();
-      };
-    }
-  }, [user]);
-
-  // Real-time market tick engine: updates prices and syncs to Firebase assetPrices
-  useEffect(() => {
-    if (positions.length === 0) return;
-
-    const interval = setInterval(() => {
-      const newFlash: Record<string, 'up' | 'down' | null> = {};
-
-      positions.forEach(pos => {
-        const cleanSymbol = pos.symbol.toUpperCase().replace('USDT', '');
-        const currentP = assetPrices[pos.symbol] ?? assetPrices[cleanSymbol] ?? pos.avgPrice ?? 97;
-        
-        let delta = 0;
-        if (currentP > 500) {
-          delta = (Math.random() - 0.48) * (currentP * 0.0015);
-        } else {
-          const roll = Math.random();
-          if (roll > 0.65) delta = 1;
-          else if (roll < 0.35) delta = -1;
-          else delta = 0;
-        }
-
-        const newP = Math.max(1, Math.round((currentP + delta) * 100) / 100);
-
-        if (newP > currentP) {
-          newFlash[pos.symbol] = 'up';
-        } else if (newP < currentP) {
-          newFlash[pos.symbol] = 'down';
-        } else {
-          newFlash[pos.symbol] = null;
-        }
-
-        // Write to Firebase assetPrices single source of truth
-        set(ref(db, `assetPrices/${cleanSymbol}`), {
-          symbol: cleanSymbol,
-          price: newP,
-          updatedAt: Date.now()
-        }).catch(() => {});
-      });
-
-      setFlashState(newFlash);
-      setTimeout(() => setFlashState({}), 800);
-
-    }, 1500);
-
-    return () => clearInterval(interval);
-  }, [positions, assetPrices]);
-
-  // Real-time Binance WebSocket hook for major crypto positions
-  useEffect(() => {
-    const cryptoSymbols = positions
-      .map(p => p.symbol)
-      .filter(s => ['BTC', 'ETH', 'BNB', 'SOL', 'XRP', 'ADA', 'DOGE'].includes(s) || s.endsWith('USDT'));
-
-    if (cryptoSymbols.length === 0) return;
-
-    const streams = cryptoSymbols.map(s => {
-      const raw = s.endsWith('USDT') ? s.toLowerCase() : `${s.toLowerCase()}usdt`;
-      return `${raw}@ticker`;
-    }).join('/');
-
-    let ws: WebSocket | null = null;
-    try {
-      ws = new WebSocket(`wss://stream.binance.com:9443/ws/${streams}`);
-      ws.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          if (data && data.s && data.c) {
-            const sym = data.s.replace('USDT', '');
-            const liveBinancePrice = parseFloat(data.c);
-
-            // Sync to Firebase assetPrices
-            set(ref(db, `assetPrices/${sym}`), {
-              symbol: sym,
-              price: liveBinancePrice,
-              updatedAt: Date.now()
-            }).catch(() => {});
+          prevPricesRef.current = { ...prevPricesRef.current, ...map };
+          setAssetPrices(prev => ({ ...prev, ...map }));
+          
+          if (Object.keys(flashes).length > 0) {
+            setPriceFlash(prev => ({ ...prev, ...flashes }));
+            setTimeout(() => {
+              if (isMounted) setPriceFlash({});
+            }, 600);
           }
-        } catch (e) {}
-      };
-    } catch (e) {}
+        }
+      } catch (err) {
+        console.warn('Portfolio quotes fetch error:', err);
+      }
+    };
+
+    fetchGlobalQuotes();
+    const interval = setInterval(fetchGlobalQuotes, 1500);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, []);
+
+  // 2. Realtime balance, positions, orders & transactions listener from Firebase
+  useEffect(() => {
+    // 1. Balance Listener
+    const balanceRef = ref(db, `users/${activeUid}/balance`);
+    const unsubscribeBal = onValue(balanceRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const val = snapshot.val();
+        setBalance(typeof val === 'number' ? val : Number(val) || 0);
+      } else {
+        const initialBalance = 0;
+        set(balanceRef, initialBalance).catch(console.error);
+        setBalance(initialBalance);
+      }
+    });
+
+    // 2. Asset Prices (Single Source of Truth from Firebase)
+    const pricesRef = ref(db, 'assetPrices');
+    const unsubscribePrices = onValue(pricesRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.val();
+        const pricesMap: Record<string, number> = {};
+        Object.entries(data).forEach(([sym, val]: [string, any]) => {
+          const p = typeof val === 'object' ? val.price : Number(val);
+          pricesMap[sym] = p;
+          pricesMap[sym.toUpperCase().replace('USDT', '')] = p;
+        });
+        setAssetPrices(prev => ({ ...prev, ...pricesMap }));
+      }
+    });
+
+    // 3. Positions
+    const positionsRef = ref(db, `users/${activeUid}/positions`);
+    const unsubscribePos = onValue(positionsRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.val();
+        const list: PositionItem[] = Object.values(data);
+        setPositions(list);
+      } else {
+        setPositions([]);
+      }
+    });
+
+    // 4. Orders
+    const ordersRef = ref(db, `users/${activeUid}/orders`);
+    const unsubscribeOrd = onValue(ordersRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.val();
+        const list: OrderItem[] = Object.values(data);
+        setOrders(list.reverse()); // most recent first
+      } else {
+        setOrders([]);
+      }
+    });
+
+    // 5. Transactions History
+    const txRef = ref(db, `users/${activeUid}/transactions`);
+    const unsubscribeTx = onValue(txRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.val();
+        const list = Object.values(data).sort((a: any, b: any) => (b.timestamp || b.createdAt || 0) - (a.timestamp || a.createdAt || 0));
+        setTransactions(list);
+      } else {
+        setTransactions([]);
+      }
+    });
 
     return () => {
+      unsubscribeBal();
+      unsubscribePrices();
+      unsubscribePos();
+      unsubscribeOrd();
+      unsubscribeTx();
+    };
+  }, [activeUid]);
+
+  // 3. Real-time Binance WebSocket for live price ticks on crypto positions
+  useEffect(() => {
+    const defaultCryptos = ['btc', 'eth', 'sol', 'bnb', 'xrp', 'ada', 'doge', 'avax', 'link', 'dot', 'near', 'sui', 'pepe', 'shib', 'ton', 'ltc', 'uni'];
+    const positionCryptos = positions
+      .map(p => p.symbol.toLowerCase().replace('usdt', ''))
+      .filter(s => !['bbca', 'bbri', 'tlkm', 'asii', 'goto', 'bmri', 'antm', 'nvda', 'aapl', 'tsla', 'gold'].includes(s));
+
+    const cryptoSymbols = Array.from(new Set([...defaultCryptos, ...positionCryptos]));
+    const streams = cryptoSymbols.map(s => `${s}usdt@ticker`).join('/');
+
+    let ws: WebSocket | null = null;
+    let retryTimeout: any = null;
+
+    const connect = () => {
+      try {
+        ws = new WebSocket(`wss://stream.binance.com:9443/ws/${streams}`);
+        ws.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            if (data && data.s && data.c) {
+              const sym = data.s.replace('USDT', '');
+              const liveBinancePrice = parseFloat(data.c);
+
+              const prevP = prevPricesRef.current[sym];
+              if (prevP && Math.abs(prevP - liveBinancePrice) > 0.0001) {
+                const dir = liveBinancePrice > prevP ? 'up' : 'down';
+                setPriceFlash(prev => ({ ...prev, [sym]: dir, [data.s]: dir }));
+                setTimeout(() => {
+                  setPriceFlash(prev => {
+                    const next = { ...prev };
+                    delete next[sym];
+                    delete next[data.s];
+                    return next;
+                  });
+                }, 500);
+              }
+
+              prevPricesRef.current[sym] = liveBinancePrice;
+              prevPricesRef.current[data.s] = liveBinancePrice;
+
+              setAssetPrices(prev => ({
+                ...prev,
+                [sym]: liveBinancePrice,
+                [`${sym}USDT`]: liveBinancePrice,
+                [data.s]: liveBinancePrice
+              }));
+            }
+          } catch (e) {}
+        };
+        ws.onclose = () => {
+          retryTimeout = setTimeout(connect, 3000);
+        };
+      } catch (e) {
+        retryTimeout = setTimeout(connect, 3000);
+      }
+    };
+
+    connect();
+
+    return () => {
+      if (retryTimeout) clearTimeout(retryTimeout);
       if (ws) ws.close();
     };
   }, [positions]);
@@ -257,16 +325,21 @@ export function PortfolioPage({ onOpenProfile }: { onOpenProfile?: () => void })
   // marketValue = currentPrice * totalShares
   // unrealizedPnL = marketValue - costBasis
   // returnPercent = (unrealizedPnL / costBasis) * 100
+  const isAssetIdr = (sym: string) => isIDXStock(sym) || ['BBCA', 'BBRI', 'BMRI', 'BBNI', 'TLKM', 'ASII', 'GOTO', 'BREN', 'AMMN', 'ANTM', 'ICBP', 'ADRO', 'PTBA', 'UNVR', 'KLBF', 'LABA', 'TAPGHDCH6A'].includes(sym.toUpperCase().replace('USDT', ''));
+
   const totalInvested = positions.reduce((sum, p) => {
-    const totalShares = (p.lot || 0) * 100;
-    const costBasis = (p.avgPrice || 0) * totalShares;
+    const isIdr = isAssetIdr(p.symbol);
+    const totalShares = (p.lot || 0) * (isIdr ? 100 : 1);
+    const costBasis = p.totalCost && p.totalCost > 0 ? p.totalCost : (p.avgPrice || 0) * totalShares;
     return sum + costBasis;
   }, 0);
   
   const currentMarketValue = positions.reduce((sum, p) => {
-    const totalShares = (p.lot || 0) * 100;
+    const isIdr = isAssetIdr(p.symbol);
+    const totalShares = (p.lot || 0) * (isIdr ? 100 : 1);
     const cleanSym = p.symbol.toUpperCase().replace('USDT', '');
-    const currentPrice = assetPrices[p.symbol] ?? assetPrices[cleanSym] ?? p.avgPrice ?? 97;
+    const livePrice = assetPrices[p.symbol] ?? assetPrices[cleanSym] ?? assetPrices[`${cleanSym}USDT`];
+    const currentPrice = livePrice && livePrice > 0 ? livePrice : (p.avgPrice || 0);
     const marketValue = totalShares * currentPrice;
     return sum + marketValue;
   }, 0);
@@ -274,6 +347,20 @@ export function PortfolioPage({ onOpenProfile }: { onOpenProfile?: () => void })
   const virtualPnL = currentMarketValue - totalInvested;
   const pnlPercent = totalInvested > 0 ? (virtualPnL / totalInvested) * 100 : 0;
   const virtualEquity = balance + currentMarketValue;
+
+  if (selectedPortfolioAsset) {
+    return (
+      <PortfolioDetailPage
+        symbol={selectedPortfolioAsset}
+        onBack={() => setSelectedPortfolioAsset(null)}
+        onSellSuccess={() => setSelectedPortfolioAsset(null)}
+        onOpenAssetDetail={(sym) => {
+          setSelectedPortfolioAsset(null);
+          setShowBuyPage(sym);
+        }}
+      />
+    );
+  }
 
   if (showBuyPage) {
     return (
@@ -298,7 +385,7 @@ export function PortfolioPage({ onOpenProfile }: { onOpenProfile?: () => void })
               <circle cx="19" cy="7" r="2" fill="#00B26A" />
             </svg>
           </div>
-          <span className="text-[17px] font-bold tracking-tight text-secondary">Portofolio</span>
+          <span className="text-sm font-bold tracking-tight text-secondary">Portofolio</span>
           <span className="flex items-center gap-1 bg-emerald-50 text-[#00B26A] text-[10px] font-bold px-2 py-0.5 rounded-full border border-emerald-200">
             <span className="w-1.5 h-1.5 rounded-full bg-[#00B26A] animate-ping" />
             LIVE
@@ -314,7 +401,7 @@ export function PortfolioPage({ onOpenProfile }: { onOpenProfile?: () => void })
 
       {/* Tabs */}
       <div className="flex px-4 border-b border-gray-100">
-        {(['PORTFOLIO', 'ORDER'] as const).map((tab) => (
+        {(['PORTFOLIO', 'ORDER', 'HISTORY'] as const).map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
@@ -323,7 +410,7 @@ export function PortfolioPage({ onOpenProfile }: { onOpenProfile?: () => void })
               activeTab === tab ? "text-primary" : "text-gray-400"
             )}
           >
-            {tab}
+            {tab === 'PORTFOLIO' ? 'STOCKS' : tab}
             {activeTab === tab && (
               <div className="absolute bottom-0 left-1/2 h-[2.5px] w-full max-w-[60%] -translate-x-1/2 bg-primary" />
             )}
@@ -337,14 +424,14 @@ export function PortfolioPage({ onOpenProfile }: { onOpenProfile?: () => void })
           <div className="grid grid-cols-3 gap-y-5">
             <div className="flex flex-col">
               <span className="text-[14px] font-bold text-secondary">
-                Rp {balance.toLocaleString('en-US')}
+                Rp {balance.toLocaleString('id-ID')}
               </span>
               <span className="text-[11px] text-gray-500 mt-0.5">Saldo Kas</span>
             </div>
 
             <div className="flex flex-col items-center">
               <span className="text-[14px] font-bold text-secondary">
-                Rp {totalInvested.toLocaleString('en-US')}
+                Rp {totalInvested.toLocaleString('id-ID')}
               </span>
               <span className="text-[11px] text-gray-500 mt-0.5">Total Modal</span>
             </div>
@@ -362,10 +449,10 @@ export function PortfolioPage({ onOpenProfile }: { onOpenProfile?: () => void })
                 "text-[15px] font-extrabold transition-colors duration-300 flex items-center gap-1",
                 virtualPnL > 0 ? "text-[#00B26A]" : virtualPnL < 0 ? "text-[#e11d48]" : "text-gray-400"
               )}>
-                {virtualPnL > 0 ? `+Rp ${virtualPnL.toLocaleString('en-US')}` : virtualPnL < 0 ? `-Rp ${Math.abs(virtualPnL).toLocaleString('en-US')}` : 'Rp 0'}
+                {virtualPnL > 0 ? `+Rp ${virtualPnL.toLocaleString('id-ID')}` : virtualPnL < 0 ? `-Rp ${Math.abs(virtualPnL).toLocaleString('id-ID')}` : 'Rp 0'}
               </span>
               <span className="text-[11px] font-semibold text-gray-500 mt-0.5 flex items-center gap-1">
-                Total P&L <Activity className="w-3 h-3 text-[#00B26A] animate-pulse" />
+                Total P&L <Activity className="w-3 h-3 text-[#00B26A]" />
               </span>
             </div>
 
@@ -381,7 +468,7 @@ export function PortfolioPage({ onOpenProfile }: { onOpenProfile?: () => void })
 
             <div className="flex flex-col items-end">
               <span className="text-[14px] font-bold text-secondary">
-                Rp {virtualEquity.toLocaleString('en-US')}
+                Rp {virtualEquity.toLocaleString('id-ID')}
               </span>
               <span className="text-[11px] text-gray-500 mt-0.5">Total Ekuitas</span>
             </div>
@@ -400,70 +487,19 @@ export function PortfolioPage({ onOpenProfile }: { onOpenProfile?: () => void })
 
                 {positions.map((pos) => {
                   const cleanSym = pos.symbol.toUpperCase().replace('USDT', '');
-                  const currentPrice = assetPrices[pos.symbol] ?? assetPrices[cleanSym] ?? pos.avgPrice ?? 97;
-                  const shares = pos.lot * 100;
-                  const costBasis = (pos.avgPrice || 0) * shares;
-                  const currentVal = shares * currentPrice;
-                  const pnlVal = currentVal - costBasis;
-                  const pnlPct = costBasis > 0 ? (pnlVal / costBasis) * 100 : 0;
-                  const isUp = pnlVal >= 0;
-                  const flash = flashState[pos.symbol];
-                  const logoUrl = assetLogos[pos.symbol] || assetLogos[pos.symbol.replace('USDT', '')];
+                  const liveP = assetPrices[pos.symbol] ?? assetPrices[cleanSym];
+                  const currentPrice = liveP && liveP > 0 ? liveP : (pos.avgPrice || 0);
 
                   return (
-                    <div 
+                    <MyInvestmentCard
                       key={pos.symbol}
-                      onClick={() => setShowBuyPage(pos.symbol)}
-                      className={cn(
-                        "bg-white border rounded-xl p-4 shadow-sm transition-all duration-300 cursor-pointer flex items-center justify-between relative overflow-hidden",
-                        flash === 'up' && "bg-emerald-50/60 border-[#00B26A]",
-                        flash === 'down' && "bg-rose-50/60 border-rose-400",
-                        !flash && "border-gray-100 hover:border-[#00B26A]"
-                      )}
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-gray-50 border border-gray-100 flex items-center justify-center shrink-0 shadow-sm overflow-hidden p-1.5">
-                          {logoUrl ? (
-                            <img 
-                              src={logoUrl} 
-                              alt={pos.symbol} 
-                              className="w-full h-full object-contain" 
-                              referrerPolicy="no-referrer"
-                            />
-                          ) : (
-                            <span className="font-black text-xs text-gray-700">{pos.symbol.substring(0, 3)}</span>
-                          )}
-                        </div>
-                        <div>
-                          <div className="flex items-center gap-1.5">
-                            <h4 className="text-[15px] font-bold text-gray-900">{pos.symbol}</h4>
-                            <span className="text-[10px] font-bold text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">
-                              {pos.lot} Lot ({shares.toLocaleString('en-US')} Lembar)
-                            </span>
-                          </div>
-                          <p className="text-[11px] text-gray-400">{pos.stockName}</p>
-                          <p className="text-[11px] text-gray-500 mt-1">
-                            Beli Avg: <span className="font-bold text-gray-700">Rp {pos.avgPrice.toLocaleString('en-US')}</span> | Live: <span className={cn(
-                              "font-extrabold transition-colors duration-200",
-                              flash === 'up' ? "text-[#00B26A]" : flash === 'down' ? "text-[#e11d48]" : "text-gray-900"
-                            )}>Rp {currentPrice.toLocaleString('en-US')}</span>
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="text-right">
-                        <p className="text-[14px] font-bold text-gray-900">
-                          Rp {currentVal.toLocaleString('en-US')}
-                        </p>
-                        <div className={cn(
-                          "inline-flex items-center gap-0.5 text-[11px] font-bold px-2 py-0.5 rounded-md mt-1 transition-all duration-300",
-                          isUp ? "bg-emerald-50 text-[#00B26A]" : "bg-rose-50 text-[#e11d48]"
-                        )}>
-                          {isUp ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-                          <span>{isUp ? '+' : ''}{pnlVal.toLocaleString('en-US')} ({pnlPct.toFixed(2)}%)</span>
-                        </div>
-                      </div>
-                    </div>
+                      symbol={pos.symbol}
+                      lot={pos.lot}
+                      avgPrice={pos.avgPrice}
+                      currentPrice={currentPrice}
+                      totalCost={pos.totalCost}
+                      onClick={() => setSelectedPortfolioAsset(pos.symbol)}
+                    />
                   );
                 })}
               </div>
@@ -488,54 +524,115 @@ export function PortfolioPage({ onOpenProfile }: { onOpenProfile?: () => void })
           </div>
         )}
 
-        {/* TAB 2: ORDERS HISTORY */}
-        {activeTab === 'ORDER' && (
-          <div className="p-4">
-            {orders.length > 0 ? (
-              <div className="flex flex-col gap-3">
-                {orders.map((ord) => {
-                  const logoUrl = assetLogos[ord.symbol] || assetLogos[ord.symbol.replace('USDT', '')];
-                  return (
-                    <div key={ord.orderId} className="bg-white border border-gray-100 rounded-xl p-4 shadow-sm">
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-2.5">
-                          <div className="w-8 h-8 rounded-full bg-gray-50 border border-gray-100 flex items-center justify-center shrink-0 shadow-sm overflow-hidden p-1">
-                            {logoUrl ? (
-                              <img src={logoUrl} alt={ord.symbol} className="w-full h-full object-contain" referrerPolicy="no-referrer" />
-                            ) : (
-                              <span className="font-bold text-[10px] text-gray-700">{ord.symbol.substring(0, 3)}</span>
-                            )}
-                          </div>
-                          <div>
-                            <span className="font-bold text-gray-900 text-sm block">{ord.symbol}</span>
-                            <span className="text-[10px] text-gray-400">{ord.stockName}</span>
-                          </div>
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-50 text-[#00B26A] ml-1">
-                            BUY
-                          </span>
-                        </div>
-                        <span className="text-[11px] font-bold text-[#00B26A] bg-emerald-50 px-2 py-0.5 rounded-full">
-                          {ord.status}
+        {/* TAB 3: HISTORY */}
+        {activeTab === 'HISTORY' && (
+          <div className="flex flex-col">
+            {/* Filter bar */}
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-white">
+              <div className="flex items-center gap-2">
+                <button 
+                  onClick={() => setHistoryFilter('ALL')}
+                  className={cn(
+                    "px-4 py-1.5 rounded-full text-xs font-bold transition-all",
+                    historyFilter === 'ALL' 
+                      ? "border border-[#00B26A] text-[#00B26A] bg-emerald-50/40" 
+                      : "border border-gray-200 text-gray-600 bg-white"
+                  )}
+                >
+                  All
+                </button>
+                <button 
+                  onClick={() => setHistoryFilter('REALIZED')}
+                  className={cn(
+                    "px-4 py-1.5 rounded-full text-xs font-bold transition-all",
+                    historyFilter === 'REALIZED' 
+                      ? "border border-[#00B26A] text-[#00B26A] bg-emerald-50/40" 
+                      : "border border-gray-200 text-gray-600 bg-white"
+                  )}
+                >
+                  Realized
+                </button>
+              </div>
+
+              <div className="flex items-center gap-1 text-xs font-bold text-gray-700 cursor-pointer hover:text-primary">
+                <span>Last 3 Months</span>
+                <ChevronDown className="w-3.5 h-3.5" />
+              </div>
+            </div>
+
+            {/* Search Input */}
+            <div className="px-4 py-3 border-b border-gray-100 bg-white">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input 
+                  type="text" 
+                  value={historySearch}
+                  onChange={(e) => setHistorySearch(e.target.value)}
+                  placeholder="Search by stock or action"
+                  className="w-full bg-gray-50/80 border border-gray-200 rounded-xl pl-9 pr-4 py-2 text-xs text-gray-900 focus:outline-none focus:border-[#00B26A]"
+                />
+              </div>
+            </div>
+
+            {/* Table Header */}
+            <div className="grid grid-cols-4 px-4 py-2.5 text-[11px] font-bold text-gray-400 border-b border-gray-100 bg-gray-50/50">
+              <span>ACTION</span>
+              <span className="text-right">AMOUNT</span>
+              <span className="text-right">PRICE</span>
+              <span className="text-right">DATE</span>
+            </div>
+
+            {/* Month Group Header */}
+            <div className="px-4 py-2 text-[11px] font-bold text-gray-500 bg-gray-50/80 border-b border-gray-100">
+              Aug 2026
+            </div>
+
+            {/* Transactions List */}
+            <div className="flex flex-col">
+              {transactions.length > 0 ? (
+                transactions
+                  .filter(tx => {
+                    if (!historySearch) return true;
+                    const q = historySearch.toLowerCase();
+                    const type = (tx.type || '').toLowerCase();
+                    const asset = (tx.asset || tx.symbol || '').toLowerCase();
+                    return type.includes(q) || asset.includes(q);
+                  })
+                  .map((tx, idx) => {
+                    const isWithdraw = tx.type?.includes('withdraw');
+                    const isDeposit = tx.type === 'deposit';
+                    const isBuy = tx.type === 'buy';
+                    const actionLabel = isWithdraw ? 'WITHDRAW' : isDeposit ? 'DEPOSIT' : isBuy ? 'BUY' : (tx.type || 'TRANSACTION').toUpperCase();
+                    const amountVal = tx.amount || tx.totalCost || 0;
+                    const priceVal = tx.price ? `Rp ${Number(tx.price).toLocaleString('en-US')}` : '-';
+                    const dateStr = new Date(tx.timestamp || tx.createdAt || Date.now()).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+
+                    return (
+                      <div key={tx.transactionId || idx} className="grid grid-cols-4 items-center px-4 py-3.5 border-b border-gray-100 hover:bg-gray-50/50 transition-colors text-xs">
+                        <span className={cn(
+                          "font-bold uppercase tracking-wide",
+                          isWithdraw ? "text-blue-600" : isDeposit ? "text-[#00B26A]" : "text-gray-900"
+                        )}>
+                          {actionLabel}
+                        </span>
+                        <span className="text-right font-bold text-gray-900">
+                          {amountVal.toLocaleString('en-US')}
+                        </span>
+                        <span className="text-right text-gray-500 font-mono">
+                          {priceVal}
+                        </span>
+                        <span className="text-right text-gray-500 text-[11px]">
+                          {dateStr}
                         </span>
                       </div>
-
-                      <div className="grid grid-cols-2 gap-2 text-[12px] text-gray-600 mt-2">
-                        <div>Harga: <span className="font-bold text-gray-900">Rp {ord.price?.toLocaleString('en-US')}</span></div>
-                        <div>Lot: <span className="font-bold text-gray-900">{ord.lot}</span></div>
-                        <div>Total: <span className="font-bold text-gray-900">Rp {ord.totalCost?.toLocaleString('en-US')}</span></div>
-                        <div className="text-gray-400 text-[10px]">
-                          {new Date(ord.createdAt || Date.now()).toLocaleTimeString()}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="text-center py-16 text-gray-400 text-sm">
-                Belum ada riwayat order
-              </div>
-            )}
+                    );
+                  })
+              ) : (
+                <div className="text-center py-16 text-gray-400 text-xs">
+                  Belum ada riwayat transaksi
+                </div>
+              )}
+            </div>
           </div>
         )}
 

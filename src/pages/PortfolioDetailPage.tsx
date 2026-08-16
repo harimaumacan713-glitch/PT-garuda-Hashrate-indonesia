@@ -1,14 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { ChevronLeft, ChevronRight, CheckCircle2, AlertCircle, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, CheckCircle2, X } from 'lucide-react';
 import { cn, getEffectiveLivePrice } from '../lib/utils';
 import { useAuth } from '../contexts/AuthContext';
 import { db } from '../lib/firebase';
 import { ref, onValue, set, runTransaction, push, remove } from 'firebase/database';
+import { getAssetName, isIDXStock } from '../lib/assetsData';
 
 interface PortfolioDetailPageProps {
   symbol: string;
   onBack: () => void;
   onSellSuccess?: () => void;
+  onOpenAssetDetail?: (symbol: string) => void;
 }
 
 const assetNames: Record<string, string> = {
@@ -44,16 +46,33 @@ const assetNames: Record<string, string> = {
   'INTC': 'Intel Corporation',
   'COIN': 'Coinbase Global, Inc.',
 
+  'BBCA': 'PT Bank Central Asia Tbk',
+  'BBRI': 'PT Bank Rakyat Indonesia Tbk',
+  'BMRI': 'PT Bank Mandiri (Persero) Tbk',
+  'BBNI': 'PT Bank Negara Indonesia Tbk',
+  'TLKM': 'PT Telkom Indonesia Tbk',
+  'ASII': 'PT Astra International Tbk',
+  'GOTO': 'PT GoTo Gojek Tokopedia Tbk',
+  'BREN': 'PT Barito Renewables Energy Tbk',
+  'AMMN': 'PT Amman Mineral Internasional Tbk',
+  'ANTM': 'PT Aneka Tambang Tbk',
+  'ICBP': 'PT Indofood CBP Sukses Makmur Tbk',
+  'ADRO': 'PT Adaro Energy Indonesia Tbk',
+  'PTBA': 'PT Bukit Asam Tbk',
+  'UNVR': 'PT Unilever Indonesia Tbk',
+  'KLBF': 'PT Kalbe Farma Tbk',
   'GOLD': 'Gold / Emas Global',
   'SILVER': 'Silver / Perak Global',
   'SPX': 'S&P 500 Index',
   'NDX': 'NASDAQ 100 Index',
   'EURUSD': 'EUR / USD Forex',
-  'LABA': 'Green Power Group Tbk.'
+  'LABA': 'Green Power Group Tbk.',
+  'TAPGHDCH6A': 'Call Waran TAPG HD'
 };
 
-export function PortfolioDetailPage({ symbol, onBack, onSellSuccess }: PortfolioDetailPageProps) {
+export function PortfolioDetailPage({ symbol, onBack, onSellSuccess, onOpenAssetDetail }: PortfolioDetailPageProps) {
   const { user } = useAuth();
+  const activeUid = user ? user.uid : 'demo_user';
   const [positionKey, setPositionKey] = useState<string | null>(null);
   const [userPosition, setUserPosition] = useState<{
     symbol: string;
@@ -70,12 +89,12 @@ export function PortfolioDetailPage({ symbol, onBack, onSellSuccess }: Portfolio
   const [sellSuccessMsg, setSellSuccessMsg] = useState<string | null>(null);
 
   const displaySymbol = symbol.toUpperCase().replace('USDT', '');
-  const stockName = assetNames[symbol.toUpperCase()] || assetNames[displaySymbol] || 'Aset Investasi';
+  const isIdr = isIDXStock(symbol) || ['BBCA', 'BBRI', 'BMRI', 'BBNI', 'TLKM', 'ASII', 'GOTO', 'BREN', 'AMMN', 'ANTM', 'ICBP', 'ADRO', 'PTBA', 'UNVR', 'KLBF', 'LABA', 'TAPGHDCH6A'].includes(displaySymbol);
+  const stockName = userPosition?.stockName || assetNames[symbol.toUpperCase()] || assetNames[displaySymbol] || getAssetName(displaySymbol) || 'Aset Investasi';
 
-  // Listen to user position
+  // Listen to user position in Firebase
   useEffect(() => {
-    if (!user) return;
-    const posRef = ref(db, `users/${user.uid}/positions`);
+    const posRef = ref(db, `users/${activeUid}/positions`);
     const unsubscribe = onValue(posRef, (snapshot) => {
       if (snapshot.exists()) {
         const data = snapshot.val();
@@ -105,7 +124,7 @@ export function PortfolioDetailPage({ symbol, onBack, onSellSuccess }: Portfolio
       }
     });
     return () => unsubscribe();
-  }, [user, symbol, displaySymbol]);
+  }, [activeUid, symbol, displaySymbol]);
 
   // Firebase assetPrices sync
   const [assetPrices, setAssetPrices] = useState<Record<string, number>>({});
@@ -122,98 +141,122 @@ export function PortfolioDetailPage({ symbol, onBack, onSellSuccess }: Portfolio
           map[sym.toUpperCase().replace('USDT', '')] = p;
         });
         setAssetPrices(map);
+
+        const currentP = map[symbol] || map[displaySymbol] || map[`${displaySymbol}USDT`];
+        if (currentP && currentP > 0) {
+          setCurrentPrice(currentP);
+        }
       }
     });
     return () => unsub();
-  }, []);
+  }, [symbol, displaySymbol]);
 
-  // Fetch real-time price & sync to Firebase assetPrices
+  // Fetch real-time price & sync to Firebase assetPrices with Binance WebSocket + API
   useEffect(() => {
     const cryptoList = ['BTC', 'ETH', 'SOL', 'BNB', 'XRP', 'ADA', 'DOGE', 'AVAX', 'MATIC', 'LINK', 'DOT', 'NEAR', 'SUI', 'PEPE', 'SHIB', 'ATOM', 'TON', 'LTC', 'UNI'];
     const isCrypto = symbol.endsWith('USDT') || cryptoList.includes(displaySymbol);
+    const binanceSymbol = symbol.endsWith('USDT') ? symbol.toUpperCase() : `${displaySymbol}USDT`;
 
-    const updatePrice = () => {
-      if (isCrypto) {
-        const binanceSymbol = symbol.endsWith('USDT') ? symbol.toUpperCase() : `${displaySymbol}USDT`;
-        fetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${binanceSymbol}`)
-          .then(r => {
-            if (!r.ok) throw new Error(`HTTP ${r.status}`);
-            return r.json();
-          })
-          .then(data => {
-            if (data && data.lastPrice) {
-              const p = parseFloat(data.lastPrice);
+    let ws: WebSocket | null = null;
+    if (isCrypto) {
+      try {
+        ws = new WebSocket(`wss://stream.binance.com:9443/ws/${binanceSymbol.toLowerCase()}@ticker`);
+        ws.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            if (data && data.c) {
+              const p = parseFloat(data.c);
               setCurrentPrice(p);
               set(ref(db, `assetPrices/${displaySymbol}`), { symbol: displaySymbol, price: p, updatedAt: Date.now() }).catch(() => {});
             }
-          })
-          .catch(err => {
-            console.warn('Crypto price fetch error:', err);
-          });
-      } else {
-        fetch(`/api/quote/${displaySymbol}`)
-          .then(r => {
-            if (!r.ok) throw new Error(`HTTP ${r.status}`);
-            return r.json();
-          })
-          .then(data => {
-            if (data && data.success && data.quote) {
-              const p = data.quote.price;
-              setCurrentPrice(p);
-              set(ref(db, `assetPrices/${displaySymbol}`), { symbol: displaySymbol, price: p, updatedAt: Date.now() }).catch(() => {});
-            }
-          })
-          .catch(err => {
-            console.warn('Stock quote fetch error:', err);
-          });
-      }
+          } catch (e) {}
+        };
+      } catch (e) {}
+
+      fetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${binanceSymbol}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data && data.lastPrice) {
+            const p = parseFloat(data.lastPrice);
+            setCurrentPrice(p);
+            set(ref(db, `assetPrices/${displaySymbol}`), { symbol: displaySymbol, price: p, updatedAt: Date.now() }).catch(() => {});
+          }
+        })
+        .catch(() => {});
+    }
+
+    const fetchQuote = () => {
+      fetch(`/api/quote/${displaySymbol}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.success && data.quote && data.quote.price) {
+            const p = data.quote.price;
+            setCurrentPrice(p);
+            set(ref(db, `assetPrices/${displaySymbol}`), { symbol: displaySymbol, price: p, updatedAt: Date.now() }).catch(() => {});
+          }
+        })
+        .catch(() => {});
     };
 
-    updatePrice();
-    const interval = setInterval(updatePrice, 2500);
-    return () => clearInterval(interval);
+    fetchQuote();
+    const interval = setInterval(fetchQuote, 2500);
+
+    return () => {
+      if (ws) ws.close();
+      clearInterval(interval);
+    };
   }, [symbol, displaySymbol]);
 
-  // Calculations using exact formulas
+  // Calculations using exact real market formulas:
   const balanceLot = userPosition?.lot || 0;
   const availableLot = balanceLot;
   const avgPrice = userPosition?.avgPrice || 0;
   const resolvedLivePrice = assetPrices[symbol] ?? assetPrices[displaySymbol] ?? (currentPrice > 0 ? currentPrice : avgPrice);
-  const priceToUse = getEffectiveLivePrice(avgPrice, resolvedLivePrice, 97);
+  const priceToUse = getEffectiveLivePrice(avgPrice, resolvedLivePrice);
 
-  const totalShares = balanceLot * 100;
-  const costBasis = avgPrice * totalShares;
-  const marketValue = totalShares * priceToUse;
+  const sharesPerLot = isIdr ? 100 : 1;
+  const totalShares = balanceLot * sharesPerLot;
+  const costBasis = userPosition?.totalCost && userPosition.totalCost > 0 ? userPosition.totalCost : (avgPrice * totalShares);
+  const marketValue = totalShares * (priceToUse > 0 ? priceToUse : avgPrice);
   const potentialPnL = marketValue - costBasis;
   const pnlPercentage = costBasis > 0 ? (potentialPnL / costBasis) * 100 : 0;
   const isUp = potentialPnL >= 0;
 
+  // Format Helper matching Stockbit exact visual display (comma separated numbers)
+  const formatNum = (val: number) => {
+    if (val === 0) return '0';
+    if (Number.isInteger(val) || Math.abs(val) >= 100) {
+      return Math.round(val).toLocaleString('en-US');
+    }
+    return val.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  };
+
   // Execute Sell
   const handleConfirmSell = async () => {
-    if (!user || !userPosition || !positionKey || sellLot <= 0 || sellLot > availableLot) return;
+    if (!userPosition || !positionKey || sellLot <= 0 || sellLot > availableLot) return;
     setIsSubmitting(true);
     try {
-      const soldShares = sellLot * 100;
-      const totalProceeds = Math.round(soldShares * priceToUse);
-      const costForSold = Math.round((sellLot / availableLot) * (userPosition.totalCost || (soldShares * avgPrice)));
-      const calculatedPnl = totalProceeds - costForSold;
+      const soldShares = sellLot * (isIdr ? 100 : 1);
+      const totalProceeds = isIdr ? Math.round(soldShares * priceToUse) : Number((soldShares * priceToUse).toFixed(2));
+      const costForSold = isIdr 
+        ? Math.round((sellLot / availableLot) * (userPosition.totalCost || (soldShares * avgPrice)))
+        : Number(((sellLot / availableLot) * (userPosition.totalCost || (soldShares * avgPrice))).toFixed(2));
+      const calculatedPnl = isIdr ? Math.round(totalProceeds - costForSold) : Number((totalProceeds - costForSold).toFixed(2));
       const calculatedPnlPercent = costForSold > 0 ? Number(((calculatedPnl / costForSold) * 100).toFixed(2)) : 0;
 
       // 1. Update Balance atomically
-      const balanceRef = ref(db, `users/${user.uid}/balance`);
+      const balanceRef = ref(db, `users/${activeUid}/balance`);
       await runTransaction(balanceRef, (currentBalance) => {
         return (currentBalance || 0) + totalProceeds;
       });
 
       // 2. Update or delete Position
       if (sellLot >= availableLot) {
-        // Sold all lots
-        await remove(ref(db, `users/${user.uid}/positions/${positionKey}`));
+        await remove(ref(db, `users/${activeUid}/positions/${positionKey}`));
       } else {
-        // Partial sell
         const remainingLot = availableLot - sellLot;
         const newTotalCost = Math.max(0, (userPosition.totalCost || 0) - costForSold);
-        await set(ref(db, `users/${user.uid}/positions/${positionKey}`), {
+        await set(ref(db, `users/${activeUid}/positions/${positionKey}`), {
           ...userPosition,
           lot: remainingLot,
           totalCost: newTotalCost
@@ -221,7 +264,7 @@ export function PortfolioDetailPage({ symbol, onBack, onSellSuccess }: Portfolio
       }
 
       // 3. Record Order history
-      const ordersRef = ref(db, `users/${user.uid}/orders`);
+      const ordersRef = ref(db, `users/${activeUid}/orders`);
       await push(ordersRef, {
         orderId: `SELL-${Date.now()}`,
         symbol: symbol.toUpperCase(),
@@ -235,12 +278,12 @@ export function PortfolioDetailPage({ symbol, onBack, onSellSuccess }: Portfolio
       });
 
       // 4. Record Transaction log
-      const txRef = ref(db, `users/${user.uid}/transactions`);
+      const txRef = ref(db, `users/${activeUid}/transactions`);
       const newTxRef = push(txRef);
       await set(newTxRef, {
         transactionId: newTxRef.key,
-        uid: user.uid,
-        userId: user.uid,
+        uid: activeUid,
+        userId: activeUid,
         type: 'sell',
         asset: displaySymbol,
         symbol: displaySymbol,
@@ -273,114 +316,125 @@ export function PortfolioDetailPage({ symbol, onBack, onSellSuccess }: Portfolio
   };
 
   return (
-    <div className="flex h-full flex-col bg-white overflow-y-auto no-scrollbar relative">
-      {/* HEADER */}
-      <div className="sticky top-0 z-20 flex items-center justify-between border-b border-gray-100 bg-white px-4 py-3.5 shadow-2xs">
-        <div className="flex items-center gap-3">
-          <button 
-            onClick={onBack}
-            className="p-1 text-gray-700 hover:text-black transition-colors"
-          >
-            <ChevronLeft className="w-6 h-6" />
-          </button>
-          <h1 className="text-[17px] font-bold text-gray-900 tracking-tight">
-            Portfolio Detail
-          </h1>
-        </div>
-      </div>
+    <div className="flex h-full flex-col bg-white overflow-y-auto no-scrollbar relative font-sans">
+      {/* 1. HEADER (Portfolio Detail centered with Back button) */}
+      <header className="sticky top-0 z-20 flex h-14 items-center justify-between px-4 bg-white border-b border-gray-100">
+        <button 
+          onClick={onBack}
+          className="flex items-center text-gray-700 hover:text-black transition-colors p-1"
+        >
+          <ChevronLeft className="w-5 h-5 stroke-[2]" />
+        </button>
+        <h1 className="text-[16px] font-semibold text-gray-900 tracking-tight text-center flex-1 pr-6">
+          Portfolio Detail
+        </h1>
+      </header>
 
       {/* SUCCESS BANNER */}
       {sellSuccessMsg && (
-        <div className="m-4 p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center gap-2.5 text-emerald-800 text-xs font-semibold animate-fade-in">
-          <CheckCircle2 className="w-5 h-5 text-[#00B26A] shrink-0" />
+        <div className="mx-4 mt-3 p-3 bg-emerald-50 border border-emerald-200 rounded-lg flex items-center gap-2.5 text-emerald-800 text-xs font-medium animate-fade-in">
+          <CheckCircle2 className="w-4 h-4 text-[#00B26A] shrink-0" />
           <span>{sellSuccessMsg}</span>
         </div>
       )}
 
-      {/* TOP ASSET BAR */}
-      <div className="p-4 border-b border-gray-100 flex items-center justify-between bg-white">
-        <div>
-          <h2 className="text-[16px] font-bold text-gray-900 tracking-tight">
+      {/* 2. TOP ASSET CARD (Symbol, Subtitle, Chevron Right) */}
+      <div 
+        onClick={() => {
+          if (onOpenAssetDetail) onOpenAssetDetail(displaySymbol);
+        }}
+        className={cn(
+          "mx-4 mt-3.5 p-3.5 px-4 rounded-lg border border-gray-200/90 bg-white flex items-center justify-between transition-colors shadow-2xs",
+          onOpenAssetDetail ? "cursor-pointer hover:bg-gray-50/60" : ""
+        )}
+      >
+        <div className="flex flex-col">
+          <span className="text-[15px] font-bold text-gray-900 tracking-tight leading-tight uppercase">
             {displaySymbol}
-          </h2>
-          <p className="text-[12px] text-gray-400 font-medium">
-            {stockName}
-          </p>
+          </span>
+          <span className="text-[12px] text-gray-400 font-normal mt-0.5 leading-tight">
+            {userPosition?.stockName || stockName || getAssetName(displaySymbol)}
+          </span>
         </div>
-        <ChevronRight className="w-5 h-5 text-gray-400" />
+        <ChevronRight className="w-5 h-5 text-gray-300 stroke-[1.75]" />
       </div>
 
-      {/* METRICS TABLE / LIST */}
-      <div className="flex-1 divide-y divide-gray-100 text-[13px]">
-        <div className="flex items-center justify-between px-4 py-3.5">
-          <span className="text-gray-500 font-medium">Balance Lot</span>
-          <span className="font-bold text-gray-900">{balanceLot.toLocaleString('en-US')}</span>
-        </div>
+      {/* 3. METRICS CARD (Balance Lot, Available Lot, Avg Price, Current Price, Invested, Market Value, Potential P&L, Percentage) */}
+      <div className="mx-4 mt-3 rounded-lg border border-gray-200/90 bg-white shadow-2xs overflow-hidden">
+        <div className="divide-y-0">
+          {/* Balance Lot */}
+          <div className="px-4 py-3 flex items-center justify-between text-[13px]">
+            <span className="text-gray-500 font-normal">Balance Lot</span>
+            <span className="text-gray-900 font-normal">{formatNum(balanceLot)}</span>
+          </div>
 
-        <div className="flex items-center justify-between px-4 py-3.5">
-          <span className="text-gray-500 font-medium">Available Lot</span>
-          <span className="font-bold text-gray-900">{availableLot.toLocaleString('en-US')}</span>
-        </div>
+          {/* Available Lot */}
+          <div className="px-4 py-3 flex items-center justify-between text-[13px]">
+            <span className="text-gray-500 font-normal">Available Lot</span>
+            <span className="text-gray-900 font-normal">{formatNum(availableLot)}</span>
+          </div>
 
-        <div className="flex items-center justify-between px-4 py-3.5">
-          <span className="text-gray-500 font-medium">Average Price</span>
-          <span className="font-bold text-gray-900">
-            {avgPrice >= 1000 ? Math.round(avgPrice).toLocaleString('en-US') : avgPrice.toFixed(2)}
-          </span>
-        </div>
+          {/* Average Price */}
+          <div className="px-4 py-3 flex items-center justify-between text-[13px]">
+            <span className="text-gray-500 font-normal">Average Price</span>
+            <span className="text-gray-900 font-normal">{formatNum(avgPrice)}</span>
+          </div>
 
-        <div className="flex items-center justify-between px-4 py-3.5">
-          <span className="text-gray-500 font-medium">Current Price</span>
-          <span className="font-bold text-gray-900">
-            {priceToUse >= 1000 ? Math.round(priceToUse).toLocaleString('en-US') : priceToUse.toFixed(2)}
-          </span>
-        </div>
+          {/* Current Price */}
+          <div className="px-4 py-3 flex items-center justify-between text-[13px]">
+            <span className="text-gray-500 font-normal">Current Price</span>
+            <span className="text-gray-900 font-normal">{formatNum(priceToUse)}</span>
+          </div>
 
-        <div className="flex items-center justify-between px-4 py-3.5">
-          <span className="text-gray-500 font-medium">Invested</span>
-          <span className="font-bold text-gray-900">
-            {Math.round(costBasis).toLocaleString('en-US')}
-          </span>
-        </div>
+          {/* Invested */}
+          <div className="px-4 py-3 flex items-center justify-between text-[13px]">
+            <span className="text-gray-500 font-normal">Invested</span>
+            <span className="text-gray-900 font-normal">{formatNum(costBasis)}</span>
+          </div>
 
-        <div className="flex items-center justify-between px-4 py-3.5">
-          <span className="text-gray-500 font-medium">Market Value</span>
-          <span className="font-bold text-gray-900">
-            {Math.round(marketValue).toLocaleString('en-US')}
-          </span>
-        </div>
+          {/* Market Value */}
+          <div className="px-4 py-3 flex items-center justify-between text-[13px]">
+            <span className="text-gray-500 font-normal">Market Value</span>
+            <span className="text-gray-900 font-normal">{formatNum(marketValue)}</span>
+          </div>
 
-        <div className="flex items-center justify-between px-4 py-3.5">
-          <span className="text-gray-500 font-medium">Potential P&L</span>
-          <span className={cn(
-            "font-bold",
-            isUp ? "text-[#00B26A]" : "text-[#e11d48]"
-          )}>
-            {isUp ? '+' : '-'}{Math.abs(Math.round(potentialPnL)).toLocaleString('en-US')}
-          </span>
-        </div>
+          {/* Potential P&L */}
+          <div className="px-4 py-3 flex items-center justify-between text-[13px]">
+            <span className="text-gray-500 font-normal">Potential P&L</span>
+            <span className={cn(
+              "font-normal",
+              isUp ? "text-[#00B26A]" : "text-[#E53935]"
+            )}>
+              {isUp ? '+' : '-'}{formatNum(Math.abs(potentialPnL))}
+            </span>
+          </div>
 
-        <div className="flex items-center justify-between px-4 py-3.5">
-          <span className="text-gray-500 font-medium">Percentage</span>
-          <span className={cn(
-            "font-bold",
-            isUp ? "text-[#00B26A]" : "text-[#e11d48]"
-          )}>
-            {isUp ? '+' : ''}{pnlPercentage.toFixed(2)}%
-          </span>
+          {/* Percentage */}
+          <div className="px-4 py-3 flex items-center justify-between text-[13px]">
+            <span className="text-gray-500 font-normal">Percentage</span>
+            <span className={cn(
+              "font-normal",
+              isUp ? "text-[#00B26A]" : "text-[#E53935]"
+            )}>
+              {isUp ? '+' : ''}{pnlPercentage.toFixed(2)}%
+            </span>
+          </div>
         </div>
       </div>
 
-      {/* BOTTOM ACTION BUTTON: SELL */}
-      <div className="sticky bottom-0 z-20 bg-white border-t border-gray-100 p-4">
+      {/* Spacer for natural push */}
+      <div className="flex-1 min-h-[40px]" />
+
+      {/* 4. BOTTOM STICKY ACTION BUTTON: SELL */}
+      <div className="sticky bottom-0 z-20 bg-white p-4 pb-6 border-t border-gray-100">
         <button
           onClick={() => setShowSellModal(true)}
           disabled={availableLot <= 0}
           className={cn(
-            "w-full py-3.5 rounded-xl font-bold text-[15px] border-2 transition-all shadow-xs",
+            "w-full py-2.5 rounded-lg font-semibold text-[14px] border transition-all text-center",
             availableLot > 0 
-              ? "border-[#e11d48] text-[#e11d48] bg-white hover:bg-red-50 active:scale-[0.99]" 
-              : "border-gray-200 text-gray-300 cursor-not-allowed"
+              ? "border-[#E53935] text-[#E53935] bg-white hover:bg-red-50/50 active:scale-[0.99]" 
+              : "border-gray-200 text-gray-300 cursor-not-allowed bg-white"
           )}
         >
           Sell
@@ -448,21 +502,21 @@ export function PortfolioDetailPage({ symbol, onBack, onSellSuccess }: Portfolio
                 <div className="flex justify-between items-center">
                   <span className="text-gray-500 font-medium">Price</span>
                   <span className="font-bold text-gray-900">
-                    {priceToUse >= 1000 ? Math.round(priceToUse).toLocaleString('en-US') : priceToUse.toFixed(2)}
+                    {formatNum(priceToUse)}
                   </span>
                 </div>
 
                 <div className="flex justify-between items-center">
                   <span className="text-gray-500 font-medium">Sell Amount</span>
                   <span className="font-bold text-gray-900">
-                    {sellAmount.toLocaleString('en-US')}
+                    {formatNum(sellAmount)}
                   </span>
                 </div>
 
                 <div className="flex justify-between items-center">
                   <span className="text-gray-500 font-medium">Fee</span>
                   <span className="font-bold text-gray-900">
-                    {fee.toLocaleString('en-US')}
+                    {formatNum(fee)}
                   </span>
                 </div>
 
@@ -470,10 +524,9 @@ export function PortfolioDetailPage({ symbol, onBack, onSellSuccess }: Portfolio
                   <span className="text-gray-500 font-medium">Profit/Loss</span>
                   <span className={cn(
                     "font-bold",
-                    isSellUp ? "text-[#00B26A]" : "text-[#e11d48]"
+                    isSellUp ? "text-[#00B26A]" : "text-[#E53935]"
                   )}>
-                    {isSellUp ? '+' : '-'}{Math.abs(Math.round(sellPnL)).toLocaleString('en-US')}
-                    ({isSellUp ? '+' : ''}{sellPnLPct.toFixed(2)}%)
+                    {isSellUp ? '+' : '-'}{formatNum(Math.abs(sellPnL))} ({isSellUp ? '+' : ''}{sellPnLPct.toFixed(2)}%)
                   </span>
                 </div>
               </div>

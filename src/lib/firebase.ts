@@ -17,3 +17,12 @@ const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getDatabase(app);
 export const googleProvider = new GoogleAuthProvider();
+
+export function initializeFirebase() {
+  const currentDomain = typeof window !== 'undefined' ? window.location.hostname : '';
+  console.log(`[Firebase] Initialized for project: ${firebaseConfig.projectId}`);
+  console.log(`[Firebase] Current host domain: ${currentDomain}`);
+  console.log(`[Firebase] Authorized domains check: Ensure '${currentDomain}' and '${firebaseConfig.authDomain}' are added in Firebase Console -> Authentication -> Settings -> Authorized domains to prevent auth/unauthorized-domain errors.`);
+  return { app, auth, db, firebaseConfig };
+}
+

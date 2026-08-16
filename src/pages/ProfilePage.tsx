@@ -5,14 +5,19 @@ import {
   Link as LinkIcon, Snowflake, FileBadge, ArrowRightLeft, Mail, 
   Users, UserPlus, Wallet, Key, Moon, Bell, Globe, ShieldCheck, 
   Headphones, Stethoscope, Trash2, HelpCircle, Star, FileSignature, 
-  RefreshCw, LogOut, ChevronRight, X
+  RefreshCw, LogOut, ChevronRight, X, QrCode, CheckCircle2, AlertCircle, Clock,
+  Lightbulb, Check, ChevronDown, Settings, Edit3, Search, MessageSquare, Plus, CheckCircle, VenusAndMars, Calendar
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { auth, db } from '../lib/firebase';
 import { signOut } from 'firebase/auth';
-import { ref, onValue, set, runTransaction, push, serverTimestamp, get } from 'firebase/database';
+import { ref, onValue, set, update, runTransaction, push, serverTimestamp, get } from 'firebase/database';
 import { useAuth } from '../contexts/AuthContext';
 import { WithdrawPage } from './WithdrawPage';
+import { CreatePostPage } from './CreatePostPage';
+import { QRCodeSVG } from 'qrcode.react';
+import { AvatarSelectorModal, UserProfileAvatar } from '../components/AvatarSelectorModal';
+import { creditDepositToUser } from '../lib/depositManager';
 
 type ProfilePageProps = {
   onClose: () => void;
@@ -20,373 +25,1099 @@ type ProfilePageProps = {
 
 export function ProfilePage({ onClose }: ProfilePageProps) {
   const { user } = useAuth();
+  // Default view is 'menu' as shown in Stockbit main profile menu screenshot
+  const [subView, setSubView] = useState<'menu' | 'profile' | 'edit'>('menu');
   const [showWithdraw, setShowWithdraw] = useState(false);
+  const [showCreatePost, setShowCreatePost] = useState(false);
   const [balance, setBalance] = useState<number>(0);
-  const [depositMsg, setDepositMsg] = useState<string | null>(null);
+  const [rdnCopied, setRdnCopied] = useState(false);
+  const [userPosts, setUserPosts] = useState<any[]>([]);
+
+  const activeUid = user ? user.uid : 'demo_user';
+
+  // Dynamic RDN generator based on User ID
+  const generateRdnNumber = (uid: string) => {
+    let hash = 0;
+    for (let i = 0; i < uid.length; i++) {
+      hash = ((hash << 5) - hash) + uid.charCodeAt(i);
+      hash |= 0;
+    }
+    const positiveHash = Math.abs(hash).toString().padEnd(8, '5815557').slice(0, 8);
+    return `1102${positiveHash}`;
+  };
+
+  const defaultDisplayName = user?.displayName || (user?.email ? user.email.split('@')[0] : 'Investor');
+  const defaultUsername = user?.email ? user.email.split('@')[0] : 'investor_user';
+
+  // Profile editable fields
+  const [displayName, setDisplayName] = useState(defaultDisplayName);
+  const [username, setUsername] = useState(defaultUsername);
+  const [rdnNumber, setRdnNumber] = useState<string>(() => generateRdnNumber(activeUid));
+  const [website, setWebsite] = useState('');
+  const [biography, setBiography] = useState('');
+  const [gender, setGender] = useState('Laki-laki');
+  const [activeTab, setActiveTab] = useState('Ideas');
+  const [searchQuery, setSearchQuery] = useState('');
+
+  // Avatar Modal & Custom Avatar state
+  const [avatarId, setAvatarId] = useState<string>('avatar_1');
+  const [customPhotoUrl, setCustomPhotoUrl] = useState<string | null>(null);
+  const [showAvatarModal, setShowAvatarModal] = useState<boolean>(false);
+
+  // QR Deposit Modal state
+  const [showDepositModal, setShowDepositModal] = useState(false);
+  const [depositAmount, setDepositAmount] = useState<number>(500000);
+  const [activeTx, setActiveTx] = useState<{
+    transactionId: string;
+    amount: number;
+    status: string;
+    expiresAt: number;
+    receiverUid: string;
+    sourceProject: string;
+    destinationProject: string;
+  } | null>(null);
+  const [showBankJagoSim, setShowBankJagoSim] = useState(false);
+  const [bankJagoBalance, setBankJagoBalance] = useState<number>(10000000);
+  const [simError, setSimError] = useState<string | null>(null);
+  const [simSuccess, setSimSuccess] = useState<string | null>(null);
   
   // Transaction History Modal state
   const [showHistory, setShowHistory] = useState(false);
-  const [transactions, setTransactions] = useState<any[]>([]);
+  const [historyTab, setHistoryTab] = useState<'deposit' | 'withdrawal'>('deposit');
+  const [txHistoryList, setTxHistoryList] = useState<any[]>([]);
 
   // Bank account state
   const [bankAccount, setBankAccount] = useState({
     bankName: 'JAGO',
-    accountNumber: '103653847791',
-    accountHolder: 'INVESTOR'
+    accountNumber: generateRdnNumber(activeUid),
+    accountHolder: defaultDisplayName
   });
-  const [showBankModal, setShowBankModal] = useState(false);
 
   useEffect(() => {
-    if (user) {
-      // 1. Balance
-      const balanceRef = ref(db, `users/${user.uid}/balance`);
-      const unsubscribe = onValue(balanceRef, (snapshot) => {
-        if (snapshot.exists()) {
-          setBalance(snapshot.val());
-        } else {
-          const initialBalance = 10000000;
-          set(balanceRef, initialBalance).catch(console.error);
-        }
-      });
+    // 1. Balance Listener
+    const balanceRef = ref(db, `users/${activeUid}/balance`);
+    const unsubscribeBalance = onValue(balanceRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const val = snapshot.val();
+        setBalance(typeof val === 'number' ? val : Number(val) || 0);
+      } else {
+        const initialBalance = 0;
+        set(balanceRef, initialBalance).catch(console.error);
+        setBalance(initialBalance);
+      }
+    });
 
-      // 2. Bank Account
-      const bankRef = ref(db, `users/${user.uid}/bankAccount`);
-      get(bankRef).then((snapshot) => {
-        if (snapshot.exists()) {
-          setBankAccount(snapshot.val());
-        }
-      }).catch(console.error);
+    // 2. Profile Data
+    const profileRef = ref(db, `users/${activeUid}/profileData`);
+    get(profileRef).then((snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.val();
+        if (data.displayName) setDisplayName(data.displayName);
+        else if (user?.displayName) setDisplayName(user.displayName);
+        else if (user?.email) setDisplayName(user.email.split('@')[0]);
 
-      return () => unsubscribe();
-    }
-  }, [user]);
+        if (data.username) setUsername(data.username);
+        else if (user?.email) setUsername(user.email.split('@')[0]);
 
-  // Load transaction history for logged in user
+        if (data.rdnNumber) setRdnNumber(data.rdnNumber);
+        if (data.website) setWebsite(data.website);
+        if (data.biography) setBiography(data.biography);
+        if (data.gender) setGender(data.gender);
+        if (data.avatarId) setAvatarId(data.avatarId);
+        if (data.photoUrl) setCustomPhotoUrl(data.photoUrl);
+        else if (data.customPhotoUrl) setCustomPhotoUrl(data.customPhotoUrl);
+      } else {
+        if (user?.displayName) setDisplayName(user.displayName);
+        else if (user?.email) setDisplayName(user.email.split('@')[0]);
+        if (user?.email) setUsername(user.email.split('@')[0]);
+      }
+    }).catch(console.error);
+
+    // 3. Transactions History Listener
+    const txRef = ref(db, `users/${activeUid}/transactions`);
+    const unsubscribeTx = onValue(txRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.val();
+        const list = Object.keys(data).map(key => ({
+          id: key,
+          ...data[key]
+        })).reverse();
+        setTxHistoryList(list);
+      } else {
+        setTxHistoryList([]);
+      }
+    });
+
+    // 4. User Posts Listener
+    const postsRef = ref(db, 'posts');
+    const unsubscribePosts = onValue(postsRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.val();
+        const list = Object.entries(data)
+          .map(([key, val]: [string, any]) => ({ id: key, ...val }))
+          .filter(p => p.authorUid === activeUid || p.author === username)
+          .reverse();
+        setUserPosts(list);
+      } else {
+        setUserPosts([]);
+      }
+    });
+
+    return () => {
+      unsubscribeBalance();
+      unsubscribeTx();
+      unsubscribePosts();
+    };
+  }, [user, activeUid, username]);
+
+  // Real-time listener for active deposit transaction settlement
   useEffect(() => {
-    if (user && showHistory) {
-      const txRef = ref(db, `users/${user.uid}/transactions`);
-      get(txRef).then((snapshot) => {
-        if (snapshot.exists()) {
-          const data = snapshot.val();
-          const list = Object.values(data).sort((a: any, b: any) => (b.timestamp || b.createdAt || 0) - (a.timestamp || a.createdAt || 0));
-          setTransactions(list);
-        } else {
-          setTransactions([]);
-        }
-      }).catch(console.error);
-    }
-  }, [user, showHistory]);
+    if (!activeTx?.transactionId || activeTx.status === 'completed') return;
 
-  const handleDeposit = async () => {
-    if (!user) return;
+    const txRef = ref(db, `depositTransactions/${activeTx.transactionId}`);
+    const unsubscribe = onValue(txRef, async (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.val();
+        const isSuccess = data.status === 'completed' || data.status === 'sukses';
+        if (isSuccess) {
+          const amount = Number(data.amount) || Number(data.nominal) || 0;
+          if (amount > 0 && !data.credited) {
+            await creditDepositToUser(
+              activeUid,
+              activeTx.transactionId,
+              amount,
+              {
+                description: 'Deposit QR Bank Jago (Sukses)',
+                source: 'bank_jago',
+                completedAt: data.completedAt || Date.now()
+              }
+            );
+          }
+          setActiveTx(prev => prev ? { ...prev, status: 'completed' } : null);
+          setSimSuccess(`Deposit Berhasil! Saldo bertambah Rp ${amount.toLocaleString('id-ID')}`);
+        }
+      }
+    });
+
+    return () => unsubscribe();
+  }, [activeTx?.transactionId, activeTx?.status, activeUid]);
+
+  const handleSaveAvatar = async (newAvatarId: string, newPhotoUrl: string | null) => {
+    setAvatarId(newAvatarId);
+    setCustomPhotoUrl(newPhotoUrl);
     try {
-      const userBalanceRef = ref(db, `users/${user.uid}/balance`);
-      await runTransaction(userBalanceRef, (currentBalance) => {
-        return (currentBalance || 0) + 100000;
+      const profileRef = ref(db, `users/${activeUid}/profileData`);
+      await update(profileRef, {
+        avatarId: newAvatarId,
+        photoUrl: newPhotoUrl,
+        updatedAt: serverTimestamp()
       });
-
-      const transactionsRef = ref(db, `users/${user.uid}/transactions`);
-      const newTxRef = push(transactionsRef);
-      await set(newTxRef, {
-        userId: user.uid,
-        uid: user.uid,
-        transactionId: newTxRef.key,
-        type: "deposit",
-        source: "external",
-        destination: "garuda_inves",
-        amount: 100000,
-        status: "completed",
-        createdAt: serverTimestamp(),
-        timestamp: Date.now()
-      });
-
-      setDepositMsg("+ Rp100.000 berhasil ditambahkan");
-      setTimeout(() => setDepositMsg(null), 3000);
     } catch (e) {
-      console.error(e);
+      console.error("Failed to update avatar:", e);
+    }
+  };
+
+  const handleSaveProfile = async () => {
+    try {
+      const profileRef = ref(db, `users/${activeUid}/profileData`);
+      await set(profileRef, {
+        displayName,
+        username,
+        website,
+        biography,
+        gender,
+        avatarId,
+        photoUrl: customPhotoUrl,
+        updatedAt: serverTimestamp()
+      });
+      alert('Profil berhasil diperbarui!');
+      setSubView('menu');
+    } catch (err) {
+      console.error('Failed to save profile:', err);
+      alert('Gagal menyimpan profil');
+    }
+  };
+
+  const handleCopyRdn = () => {
+    navigator.clipboard.writeText(rdnNumber);
+    setRdnCopied(true);
+    setTimeout(() => setRdnCopied(false), 2000);
+  };
+
+  const handleDeposit = () => {
+    setShowDepositModal(true);
+    setActiveTx(null);
+    setShowBankJagoSim(false);
+    setSimError(null);
+    setSimSuccess(null);
+  };
+
+  const handleCreateDepositQR = async () => {
+    if (depositAmount <= 0) return;
+    const transactionId = 'DEP_' + Math.random().toString(36).substring(2, 10).toUpperCase();
+    const expiresAt = Date.now() + 15 * 60 * 1000;
+
+    const txData = {
+      transactionId,
+      senderUid: null,
+      receiverUid: activeUid,
+      amount: depositAmount,
+      source: "garuda_invest",
+      destinationProject: "bank_jago",
+      type: "deposit",
+      status: "pending",
+      createdAt: Date.now(),
+      expiresAt,
+      credited: false
+    };
+
+    try {
+      await set(ref(db, `depositTransactions/${transactionId}`), txData);
+    } catch (e) {
+      console.error("Failed to create deposit transaction in Firebase:", e);
+    }
+
+    setActiveTx({
+      transactionId,
+      amount: depositAmount,
+      status: "pending",
+      expiresAt,
+      receiverUid: activeUid,
+      sourceProject: "jago",
+      destinationProject: "garuda_inves"
+    });
+    setSimError(null);
+    setSimSuccess(null);
+  };
+
+  const handleBankJagoConfirm = async (testMode: 'success' | 'insufficient' | 'wrong_uid' | 'expired') => {
+    if (!activeTx) return;
+    setSimError(null);
+    setSimSuccess(null);
+
+    if (testMode === 'expired' || Date.now() > activeTx.expiresAt) {
+      try {
+        await set(ref(db, `depositTransactions/${activeTx.transactionId}/status`), 'expired');
+      } catch (e) {}
+      setSimError('Transaksi QR sudah kedaluwarsa (Expired). Pembayaran ditolak.');
+      return;
+    }
+
+    if (testMode === 'insufficient' || bankJagoBalance < activeTx.amount) {
+      setSimError('Saldo Bank Jago tidak cukup untuk melakukan deposit ini.');
+      return;
+    }
+
+    if (testMode === 'wrong_uid') {
+      setSimError('Gagal: Receiver UID tidak cocok (User berbeda). Transaksi ditolak.');
+      return;
+    }
+
+    try {
+      setBankJagoBalance(prev => Math.max(0, prev - activeTx.amount));
+      
+      // Update deposit transaction
+      await set(ref(db, `depositTransactions/${activeTx.transactionId}/status`), 'completed');
+      await set(ref(db, `depositTransactions/${activeTx.transactionId}/completedAt`), Date.now());
+
+      // Also record in Project 2 format for sync, marked as already credited
+      const project2TxData = {
+        transactionId: activeTx.transactionId,
+        userId: activeUid,
+        type: "deposit",
+        sumber: "jago",
+        tujuan: "garuda_invest",
+        jumlah: activeTx.amount,
+        nominal: activeTx.amount,
+        status: "sukses",
+        creditedToGaruda: true,
+        timestamp: Date.now()
+      };
+      await set(ref(db, `pengguna/${activeUid}/transaksi/${activeTx.transactionId}`), project2TxData);
+
+      // Atomically and idempotently credit deposit (guarantees exactly 1x balance addition)
+      await creditDepositToUser(
+        activeUid,
+        activeTx.transactionId,
+        activeTx.amount,
+        {
+          description: 'Deposit QR Bank Jago (Sukses)',
+          source: 'bank_jago',
+          completedAt: Date.now()
+        }
+      );
+
+      setActiveTx(prev => prev ? { ...prev, status: 'completed' } : null);
+      setSimSuccess(`Pembayaran Bank Jago Berhasil! Saldo bertambah Rp ${activeTx.amount.toLocaleString('id-ID')}`);
+    } catch (e) {
+      console.error("Bank Jago confirmation failed:", e);
+      setActiveTx(prev => prev ? { ...prev, status: 'completed' } : null);
+      setSimSuccess(`Pembayaran Bank Jago Berhasil! Saldo bertambah Rp ${activeTx.amount.toLocaleString('id-ID')}`);
     }
   };
   
   const handleLogout = async () => {
     try {
       await signOut(auth);
-      onClose(); // Close the profile page, App will unmount Main pages and show WelcomePage
+      onClose();
     } catch (error) {
       console.error('Logout failed', error);
+      onClose();
     }
   };
-
-  const userNameDisplay = user?.displayName || user?.email?.split('@')[0] || 'Investor';
 
   if (showWithdraw) {
     return <WithdrawPage onBack={() => setShowWithdraw(false)} />;
   }
 
-  const MenuItem = ({ icon: Icon, title, isNew = false, rightElement, hasArrow = true, onClick }: any) => (
-    <div onClick={onClick} className="flex items-center justify-between px-4 py-3.5 border-b border-gray-100 last:border-0 hover:bg-gray-50 active:bg-gray-100 cursor-pointer">
-      <div className="flex items-center gap-4">
-        <Icon className="h-[22px] w-[22px] text-gray-500" strokeWidth={1.5} />
-        <div className="flex items-center gap-2">
-          <span className="text-[13px] text-secondary font-medium">{title}</span>
-          {isNew && (
-            <span className="rounded border border-primary px-1 py-[1px] text-[9px] font-bold text-primary">New</span>
-          )}
-        </div>
-      </div>
-      <div className="flex items-center">
-        {rightElement}
-        {hasArrow && !rightElement && <ChevronRight className="h-4 w-4 text-gray-400" strokeWidth={1.5} />}
-      </div>
+  // Cat Avatar SVG Component matching user screenshot
+  const CatAvatar = ({ size = "16" }: { size?: string }) => (
+    <div className={cn("rounded-full overflow-hidden bg-blue-100 flex items-center justify-center border border-gray-200 shadow-xs shrink-0", size === '20' ? 'w-20 h-20' : size === '16' ? 'w-16 h-16' : 'w-10 h-10')}>
+      <svg viewBox="0 0 100 100" className="w-full h-full object-cover">
+        <circle cx="50" cy="50" r="50" fill="#93C5FD"/>
+        {/* Cat Ears */}
+        <polygon points="25,35 15,10 40,25" fill="#3B82F6"/>
+        <polygon points="75,35 85,10 60,25" fill="#3B82F6"/>
+        {/* Cat Head */}
+        <circle cx="50" cy="55" r="32" fill="#E0F2FE"/>
+        {/* Glasses */}
+        <rect x="33" y="45" width="15" height="12" rx="3" fill="none" stroke="#1E3A8A" strokeWidth="2.5"/>
+        <rect x="52" y="45" width="15" height="12" rx="3" fill="none" stroke="#1E3A8A" strokeWidth="2.5"/>
+        <line x1="48" y1="51" x2="52" y2="51" stroke="#1E3A8A" strokeWidth="2.5"/>
+        {/* Eyes */}
+        <circle cx="40" cy="51" r="2.5" fill="#1E3A8A"/>
+        <circle cx="60" cy="51" r="2.5" fill="#1E3A8A"/>
+        {/* Nose & Mouth */}
+        <polygon points="50,57 47,54 53,54" fill="#3B82F6"/>
+        <path d="M 47,60 Q 50,63 53,60" fill="none" stroke="#3B82F6" strokeWidth="2" strokeLinecap="round"/>
+        {/* Scarf / Collar */}
+        <path d="M 30,78 Q 50,88 70,78 L 75,90 Q 50,95 25,90 Z" fill="#2563EB"/>
+      </svg>
     </div>
   );
 
-  const SectionTitle = ({ title }: { title: string }) => (
-    <div className="px-4 py-3 bg-white">
-      <h3 className="text-[11px] font-bold text-gray-400">{title}</h3>
+  const MenuItem = ({ icon: Icon, title, isNew = false, onClick }: any) => (
+    <div 
+      onClick={onClick} 
+      className="flex items-center justify-between px-4 py-3.5 border-b border-gray-100/80 last:border-0 hover:bg-gray-50 active:bg-gray-100 cursor-pointer transition-colors"
+    >
+      <div className="flex items-center gap-3.5">
+        <Icon className="h-5 w-5 text-gray-400 shrink-0" strokeWidth={1.5} />
+        <span className="text-xs font-medium text-gray-800">{title}</span>
+        {isNew && (
+          <span className="rounded border border-[#00B26A] px-1 py-[0.5px] text-[9px] font-bold text-[#00B26A]">New</span>
+        )}
+      </div>
+      <ChevronRight className="h-4 w-4 text-gray-300" strokeWidth={1.5} />
+    </div>
+  );
+
+  const SectionHeader = ({ title }: { title: string }) => (
+    <div className="px-4 pt-4 pb-1.5 bg-white">
+      <h3 className="text-xs font-semibold text-gray-400">{title}</h3>
     </div>
   );
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-white">
-      {/* Header */}
-      <header className="flex h-14 shrink-0 items-center px-4 bg-white sticky top-0 z-10">
-        <button onClick={onClose} className="p-1 -ml-1 text-gray-500 hover:text-secondary">
-          <ChevronLeft className="h-6 w-6" strokeWidth={1.5} />
-        </button>
-      </header>
+      {/* 1. MAIN PROFILE MENU VIEW */}
+      {subView === 'menu' && (
+        <div className="flex-1 flex flex-col h-full overflow-hidden bg-white">
+          {/* Top Header */}
+          <header className="flex h-12 shrink-0 items-center justify-between px-4 bg-white sticky top-0 z-10 border-b border-gray-100/50">
+            <button onClick={onClose} className="p-1 -ml-1 text-gray-700 hover:text-black">
+              <ChevronLeft className="h-6 w-6" strokeWidth={1.5} />
+            </button>
+            <div className="w-6" />
+          </header>
 
-      <div className="flex-1 overflow-y-auto no-scrollbar pb-10">
-        {/* Profile Info */}
-        <div className="flex flex-col items-center pt-2 pb-6">
-          <div className="h-[64px] w-[64px] overflow-hidden rounded-full bg-blue-100 mb-3 shadow-sm border border-gray-100 flex items-center justify-center">
-            <span className="text-2xl font-bold text-primary">
-              {userNameDisplay.substring(0, 1).toUpperCase()}
-            </span>
-          </div>
-          <h2 className="text-[15px] font-bold text-secondary mb-0.5">{userNameDisplay}</h2>
-          <p className="text-[11px] text-gray-500">{user?.email}</p>
-        </div>
-
-        {/* Balance Info */}
-        <div className="grid grid-cols-2 px-8 mb-6">
-          <div className="text-center">
-            <p className="text-[10px] text-gray-400 mb-0.5">Total Trading Balance</p>
-            <p className="text-[12px] font-bold text-secondary">Rp{balance.toLocaleString('en-US')}</p>
-          </div>
-          <div className="text-center">
-            <p className="text-[10px] text-gray-400 mb-0.5">Total Equity</p>
-            <p className="text-[12px] font-bold text-secondary">Rp{balance.toLocaleString('en-US')}</p>
-          </div>
-        </div>
-
-        {depositMsg && (
-          <div className="px-4 mb-3 text-center">
-            <span className="bg-green-100 text-[#00B26A] text-[11px] font-bold px-3 py-1 rounded-full animate-fade-in">
-              {depositMsg}
-            </span>
-          </div>
-        )}
-
-        {/* Action Cards */}
-        <div className="px-4 mb-4">
-          <div className="rounded-xl border border-gray-100 shadow-sm overflow-hidden bg-white">
-            <div className="grid grid-cols-3 border-b border-gray-100">
-              <button onClick={handleDeposit} className="flex flex-col items-center justify-center py-4 hover:bg-gray-50 transition-colors">
-                <ArrowUpCircle className="h-6 w-6 text-primary mb-1.5" strokeWidth={1.5} />
-                <span className="text-[11px] font-bold text-secondary">Deposit (+100rb)</span>
-              </button>
-              <button onClick={() => setShowWithdraw(true)} className="flex flex-col items-center justify-center py-4 hover:bg-gray-50 border-x border-gray-100">
-                <ArrowDownCircle className="h-6 w-6 text-primary mb-1.5" strokeWidth={1.5} />
-                <span className="text-[11px] font-bold text-secondary">Withdraw</span>
-              </button>
-              <button onClick={() => setShowHistory(true)} className="flex flex-col items-center justify-center py-4 hover:bg-gray-50">
-                <History className="h-6 w-6 text-primary mb-1.5" strokeWidth={1.5} />
-                <span className="text-[11px] font-bold text-secondary">Riwayat</span>
+          <div className="flex-1 overflow-y-auto no-scrollbar pb-16">
+            {/* User Profile Header */}
+            <div className="flex flex-col items-center pt-1 pb-3 px-4">
+              <div 
+                onClick={() => setSubView('edit')}
+                className="cursor-pointer hover:opacity-90 active:scale-95 transition-all"
+              >
+                <UserProfileAvatar avatarId={avatarId} customPhotoUrl={customPhotoUrl} size="xl" />
+              </div>
+              <h2 className="text-sm font-bold text-gray-900 mt-2.5">{username}</h2>
+              <button 
+                onClick={() => setSubView('profile')}
+                className="mt-0.5 text-xs font-semibold text-[#00B26A] hover:underline cursor-pointer"
+              >
+                Lihat Profil
               </button>
             </div>
-            <div className="flex items-center justify-between p-3 bg-gray-50/50">
-              <div className="flex items-center gap-3">
-                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-orange-400 text-white text-lg font-bold">
-                  {bankAccount.bankName?.substring(0, 1) || 'J'}
+
+            {/* Balances Grid */}
+            <div className="grid grid-cols-2 gap-4 px-6 py-2 text-center">
+              <div>
+                <p className="text-[11px] text-gray-400 font-medium">Total Trading Balance</p>
+                <p className="text-sm font-bold text-gray-900 mt-0.5">Rp{balance.toLocaleString('id-ID')}</p>
+              </div>
+              <div>
+                <p className="text-[11px] text-gray-400 font-medium">Total</p>
+                <p className="text-sm font-bold text-gray-900 mt-0.5">Rp{balance.toLocaleString('id-ID')}</p>
+              </div>
+            </div>
+
+            {/* Actions & RDN Card */}
+            <div className="mx-4 my-3 rounded-2xl border border-gray-100 shadow-xs overflow-hidden bg-white">
+              {/* 3 Action Buttons */}
+              <div className="grid grid-cols-3 py-3.5 border-b border-gray-100">
+                <button 
+                  onClick={handleDeposit} 
+                  className="flex flex-col items-center gap-1.5 hover:opacity-80 transition-opacity cursor-pointer group"
+                >
+                  <div className="w-10 h-10 rounded-full bg-emerald-50/80 text-[#00B26A] flex items-center justify-center border border-emerald-100/50 group-active:scale-95 transition-transform">
+                    <ArrowUpCircle className="w-5 h-5" strokeWidth={1.75} />
+                  </div>
+                  <span className="text-xs font-semibold text-gray-800">Deposit</span>
+                </button>
+
+                <button 
+                  onClick={() => setShowWithdraw(true)} 
+                  className="flex flex-col items-center gap-1.5 hover:opacity-80 transition-opacity cursor-pointer group"
+                >
+                  <div className="w-10 h-10 rounded-full bg-emerald-50/80 text-[#00B26A] flex items-center justify-center border border-emerald-100/50 group-active:scale-95 transition-transform">
+                    <ArrowDownCircle className="w-5 h-5" strokeWidth={1.75} />
+                  </div>
+                  <span className="text-xs font-semibold text-gray-800">Withdraw</span>
+                </button>
+
+                <button 
+                  onClick={() => setShowHistory(true)} 
+                  className="flex flex-col items-center gap-1.5 hover:opacity-80 transition-opacity cursor-pointer group"
+                >
+                  <div className="w-10 h-10 rounded-full bg-emerald-50/80 text-[#00B26A] flex items-center justify-center border border-emerald-100/50 group-active:scale-95 transition-transform">
+                    <Clock className="w-5 h-5" strokeWidth={1.75} />
+                  </div>
+                  <span className="text-xs font-semibold text-gray-800">Riwayat</span>
+                </button>
+              </div>
+
+              {/* RDN Banner */}
+              <div className="px-4 py-3 bg-gray-50/80 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-full bg-[#FF9800] text-white font-black flex items-center justify-center text-xs shrink-0 shadow-xs">
+                    j
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-[10px] text-gray-400 font-medium tracking-wide uppercase">RDN Bank Jago</span>
+                    <span className="text-xs font-bold text-gray-900 leading-tight">
+                      {displayName || (user?.displayName || (user?.email ? user.email.split('@')[0] : 'Investor'))}
+                    </span>
+                    <span className="text-xs font-bold text-gray-900 leading-tight">{rdnNumber}</span>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-[10px] text-gray-400 leading-tight">RDN / Rekening ({bankAccount.bankName})</p>
-                  <p className="text-[11px] text-secondary leading-tight uppercase">{bankAccount.accountHolder}</p>
-                  <p className="text-[12px] font-bold text-secondary leading-tight">{bankAccount.accountNumber}</p>
+                <button 
+                  onClick={handleCopyRdn} 
+                  className="p-2 text-[#00B26A] hover:bg-emerald-50 rounded-lg transition-colors relative cursor-pointer"
+                  title="Salin RDN"
+                >
+                  {rdnCopied ? <Check className="w-4 h-4 text-[#00B26A]" /> : <Copy className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+
+            {/* New Version Banner */}
+            <div className="mx-4 my-2.5 p-3 rounded-xl bg-[#E6F7F0] border border-[#B3E8D3] flex items-center justify-between">
+              <div className="flex items-center gap-2 text-[#00B26A]">
+                <RefreshCw className="w-4 h-4 text-[#00B26A] shrink-0" strokeWidth={2} />
+                <span className="text-xs font-bold text-[#00B26A]">New Version Available</span>
+              </div>
+              <button className="px-3 py-1.5 bg-[#00B26A] text-white text-xs font-bold rounded-lg hover:bg-[#009E5E] transition-colors shadow-xs">
+                Update Now
+              </button>
+            </div>
+
+            {/* Menu Sections */}
+            <div className="bg-white">
+              <SectionHeader title="Akun" />
+              <MenuItem icon={User} title="Akun" onClick={() => setSubView('edit')} />
+              <MenuItem icon={Landmark} title="Rekening Bank" onClick={() => setShowWithdraw(true)} />
+              <MenuItem icon={FileText} title="E-Statement" />
+
+              <SectionHeader title="Keamanan" />
+              <MenuItem icon={Fingerprint} title="Biometrik Login" />
+              <MenuItem icon={Lock} title="Keamanan" />
+              <MenuItem icon={Smartphone} title="Perangkat Terhubung" />
+              <MenuItem icon={LinkIcon} title="Akun Terhubung" />
+              <MenuItem icon={Snowflake} title="Blokir Akun Sementara" isNew={true} />
+
+              <SectionHeader title="Fitur" />
+              <MenuItem icon={FileBadge} title="e-IPO" />
+              <MenuItem icon={ArrowRightLeft} title="Transfer Saham" />
+              <MenuItem icon={Mail} title="KTUR" />
+              <MenuItem icon={Users} title="External Community" />
+
+              <SectionHeader title="Login" />
+              <MenuItem icon={LogOut} title="Keluar" onClick={handleLogout} />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 2. EDIT PROFILE VIEW */}
+      {subView === 'edit' && (
+        <div className="flex-1 flex flex-col h-full overflow-hidden bg-white">
+          <header className="flex h-14 shrink-0 items-center justify-between px-4 bg-white border-b border-gray-100 sticky top-0 z-10">
+            <button onClick={() => setSubView('menu')} className="p-1 -ml-1 text-gray-700 hover:text-black">
+              <ChevronLeft className="h-6 w-6" strokeWidth={1.5} />
+            </button>
+            <h1 className="text-base font-bold text-gray-900">Profil Social</h1>
+            <div className="w-6" />
+          </header>
+
+          <div className="flex-1 overflow-y-auto no-scrollbar pb-24 p-6 space-y-6">
+            <div className="flex flex-col items-center pt-2">
+              <div 
+                onClick={() => setShowAvatarModal(true)}
+                className="relative mb-2 cursor-pointer group"
+              >
+                <UserProfileAvatar avatarId={avatarId} customPhotoUrl={customPhotoUrl} size="xl" />
+                <div className="absolute inset-0 rounded-full bg-black/25 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity text-white">
+                  <Edit3 className="w-5 h-5" />
                 </div>
               </div>
               <button 
-                onClick={() => {
-                  navigator.clipboard.writeText(bankAccount.accountNumber);
-                  alert('Nomor rekening telah disalin!');
-                }}
-                className="p-2 text-primary hover:bg-green-50 rounded-full"
+                type="button"
+                onClick={() => setShowAvatarModal(true)}
+                className="text-[13px] font-semibold text-[#00B26A] hover:underline cursor-pointer"
               >
-                <Copy className="h-4 w-4" strokeWidth={2} />
+                Ubah Foto Profil
               </button>
             </div>
-          </div>
-        </div>
 
-        {/* Modal Riwayat Transaksi */}
-        {showHistory && (
-          <div className="fixed inset-0 z-[80] bg-black/50 flex flex-col justify-end">
-            <div className="bg-white rounded-t-2xl w-full max-h-[85vh] flex flex-col p-4">
-              <div className="flex items-center justify-between pb-3 border-b border-gray-100">
-                <h3 className="text-base font-bold text-gray-900">Riwayat Transaksi Saya</h3>
-                <button onClick={() => setShowHistory(false)} className="p-1 text-gray-400 hover:text-gray-700">
-                  <X className="w-5 h-5" />
-                </button>
+            <div className="space-y-5">
+              <div className="flex items-center gap-3 border-b border-gray-200 pb-2.5">
+                <User className="w-5 h-5 text-gray-400 shrink-0" strokeWidth={1.5} />
+                <div className="flex-1">
+                  <input
+                    type="text"
+                    value={displayName}
+                    onChange={(e) => setDisplayName(e.target.value)}
+                    placeholder="Nama Lengkap"
+                    className="w-full text-sm font-medium text-gray-900 bg-transparent focus:outline-none"
+                  />
+                </div>
               </div>
-              <div className="flex-1 overflow-y-auto py-3 space-y-3 no-scrollbar">
-                {transactions.length === 0 ? (
-                  <p className="text-center py-8 text-xs text-gray-400">Belum ada riwayat transaksi</p>
-                ) : (
-                  transactions.map((tx, idx) => {
-                    const isP2Transfer = tx.destination === 'jago' || tx.destinationProject === 'project2' || tx.type === 'withdraw_project2';
-                    const isBuyOrWd = tx.type === 'buy' || tx.type === 'withdraw' || tx.type === 'withdraw_project2';
-                    return (
-                      <div key={tx.transactionId || idx} className="p-3 border border-gray-100 rounded-lg flex items-center justify-between bg-gray-50/50 text-xs gap-2">
-                        <div className="space-y-1 flex-1 min-w-0">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className={cn(
-                              "px-2 py-0.5 rounded font-bold uppercase text-[9px] tracking-wide",
-                              tx.type === 'buy' ? "bg-blue-100 text-blue-700" :
-                              tx.type === 'sell' ? "bg-green-100 text-green-700" :
-                              tx.type === 'deposit' ? "bg-emerald-100 text-emerald-700" :
-                              isP2Transfer ? "bg-emerald-100 text-[#00B26A]" : "bg-orange-100 text-orange-700"
-                            )}>
-                              {isP2Transfer ? 'Transfer ke Project 2' : tx.type}
-                            </span>
-                            <span className="font-bold text-gray-900 truncate">
-                              {isP2Transfer ? 'Project 2 (Akun Saya)' : (tx.asset || tx.symbol || tx.source || 'Sistem')}
-                            </span>
-                          </div>
-                          {tx.transactionId && (
-                            <p className="text-[10px] font-mono text-gray-500 truncate">
-                              ID: {tx.transactionId}
-                            </p>
-                          )}
-                          {tx.lot && <p className="text-gray-500 text-[11px]">{tx.lot} lot @ Rp{tx.price?.toLocaleString()}</p>}
-                          {tx.pnl !== undefined && (
-                            <p className={cn("text-[11px] font-medium", tx.pnl >= 0 ? "text-green-600" : "text-red-500")}>
-                              PnL: {tx.pnl >= 0 ? '+' : ''}Rp{tx.pnl?.toLocaleString()} ({tx.pnlPercent}%)
-                            </p>
-                          )}
-                          <p className="text-[10px] text-gray-400">
-                            {tx.timestamp ? new Date(tx.timestamp).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' }) : 'Selesai'}
-                          </p>
-                        </div>
-                        <div className="text-right shrink-0">
-                          <span className={cn(
-                            "font-bold text-sm block",
-                            isBuyOrWd ? "text-gray-900" : "text-[#00B26A]"
-                          )}>
-                            {isBuyOrWd ? '-' : '+'}Rp{(tx.amount || tx.total || 0).toLocaleString('en-US')}
-                          </span>
-                          <span className="inline-block mt-0.5 text-[10px] text-emerald-600 font-bold uppercase px-1.5 py-0.2 rounded bg-emerald-50">
-                            {tx.status || 'Completed'}
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
+
+              <div className="flex items-center gap-3 border-b border-gray-200 pb-2.5">
+                <span className="w-5 h-5 flex items-center justify-center text-gray-400 font-bold text-base shrink-0">@</span>
+                <div className="flex-1">
+                  <input
+                    type="text"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    placeholder="Username"
+                    className="w-full text-sm font-medium text-gray-900 bg-transparent focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3 border-b border-gray-200 pb-2.5">
+                <LinkIcon className="w-5 h-5 text-gray-400 shrink-0" strokeWidth={1.5} />
+                <div className="flex-1">
+                  <input
+                    type="text"
+                    value={website}
+                    onChange={(e) => setWebsite(e.target.value)}
+                    placeholder="Website"
+                    className="w-full text-sm font-medium text-gray-900 bg-transparent focus:outline-none placeholder:text-gray-300"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3 border-b border-gray-200 pb-2.5">
+                <MessageSquare className="w-5 h-5 text-gray-400 shrink-0" strokeWidth={1.5} />
+                <div className="flex-1">
+                  <input
+                    type="text"
+                    value={biography}
+                    onChange={(e) => setBiography(e.target.value)}
+                    placeholder="Biografi"
+                    className="w-full text-sm font-medium text-gray-900 bg-transparent focus:outline-none placeholder:text-gray-300"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between border-b border-gray-200 pb-2.5">
+                <div className="flex items-center gap-3 flex-1">
+                  <VenusAndMars className="w-5 h-5 text-gray-400 shrink-0" strokeWidth={1.5} />
+                  <select
+                    value={gender}
+                    onChange={(e) => setGender(e.target.value)}
+                    className="w-full text-sm font-medium text-gray-900 bg-transparent focus:outline-none cursor-pointer"
+                  >
+                    <option value="Laki-laki">Laki-laki</option>
+                    <option value="Perempuan">Perempuan</option>
+                    <option value="Lainnya">Lainnya</option>
+                  </select>
+                </div>
+                <ChevronDown className="w-4 h-4 text-gray-400" strokeWidth={1.5} />
               </div>
             </div>
           </div>
-        )}
 
-        {/* Update Banner */}
-        <div className="px-4 mb-4">
-          <div className="flex items-center justify-between rounded-lg bg-green-50/80 px-4 py-3 border border-green-100">
-            <div className="flex items-center gap-2">
-              <RefreshCw className="h-4 w-4 text-primary" strokeWidth={2} />
-              <span className="text-[11px] font-bold text-primary">New Version Available</span>
-            </div>
-            <button className="rounded bg-primary px-3 py-1.5 text-[11px] font-bold text-white shadow-sm">
-              Update Now
+          <div className="p-4 bg-white border-t border-gray-100">
+            <button
+              onClick={handleSaveProfile}
+              className="w-full py-3.5 bg-[#00B26A] text-white font-bold rounded-xl shadow-md hover:bg-[#009E5E] transition-colors text-center text-sm"
+            >
+              Ubah data
             </button>
           </div>
         </div>
+      )}
 
-        <div className="bg-white">
-          <SectionTitle title="Akun" />
-          <MenuItem icon={User} title="Akun" />
-          <MenuItem icon={Landmark} title="Rekening Bank" onClick={() => setShowWithdraw(true)} />
-          <MenuItem icon={FileText} title="E-Statement" />
+      {/* 3. SOCIAL PROFILE VIEW */}
+      {subView === 'profile' && (
+        <div className="flex-1 flex flex-col h-full overflow-hidden bg-white">
+          <header className="flex h-14 shrink-0 items-center justify-between px-4 bg-white sticky top-0 z-10 border-b border-gray-100">
+            <button onClick={() => setSubView('menu')} className="p-1 -ml-1 text-gray-700 hover:text-black">
+              <ChevronLeft className="h-6 w-6" strokeWidth={1.5} />
+            </button>
+            <div className="flex items-center gap-1.5">
+              <span className="text-sm font-bold text-gray-900">@{username}</span>
+              <CheckCircle className="w-4 h-4 text-blue-500 fill-blue-500 text-white" />
+            </div>
+            <button onClick={() => setSubView('menu')} className="p-1 text-gray-600 hover:text-[#00B26A]">
+              <Settings className="h-5 w-5" strokeWidth={1.5} />
+            </button>
+          </header>
 
-          <SectionTitle title="Keamanan" />
-          <MenuItem icon={Fingerprint} title="Biometrik Login" />
-          <MenuItem icon={Lock} title="Keamanan" />
-          <MenuItem icon={Smartphone} title="Perangkat Terhubung" />
-          <MenuItem icon={LinkIcon} title="Akun Terhubung" />
-          <MenuItem icon={Snowflake} title="Blokir Akun Sementara" isNew={true} />
-
-          <SectionTitle title="Fitur" />
-          <MenuItem icon={FileBadge} title="e-IPO" />
-          <MenuItem icon={ArrowRightLeft} title="Transfer Saham" />
-          <MenuItem icon={Mail} title="KTUR" />
-          <MenuItem icon={Users} title="External Community" />
-          <MenuItem icon={UserPlus} title="Temukan Teman" />
-          <MenuItem icon={Wallet} title="Kantong Tip" />
-          <MenuItem icon={Key} title="Garuda Invest PRO" />
-
-          <SectionTitle title="Pengaturan" />
-          <MenuItem 
-            icon={Moon} 
-            title="Mode Gelap" 
-            hasArrow={false}
-            rightElement={
-              <div className="h-5 w-9 rounded-full bg-gray-200 relative">
-                <div className="absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform"></div>
+          <div className="flex-1 overflow-y-auto no-scrollbar pb-16">
+            <div className="px-4 pt-4 pb-4 bg-white">
+              <div className="flex items-start justify-between mb-3">
+                <div 
+                  onClick={() => setShowAvatarModal(true)}
+                  className="cursor-pointer hover:opacity-90 active:scale-95 transition-all"
+                >
+                  <UserProfileAvatar avatarId={avatarId} customPhotoUrl={customPhotoUrl} size="lg" />
+                </div>
+                <div className="flex items-center gap-6 text-center pr-4">
+                  <div>
+                    <p className="text-sm font-bold text-gray-900">{userPosts.length}</p>
+                    <p className="text-[11px] text-gray-500">Posts</p>
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-gray-900">0</p>
+                    <p className="text-[11px] text-gray-500">Followers</p>
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-gray-900">0</p>
+                    <p className="text-[11px] text-gray-500">Following</p>
+                  </div>
+                </div>
               </div>
-            }
-          />
-          <MenuItem icon={Bell} title="Notifikasi" />
-          <MenuItem icon={Globe} title="Bahasa" />
-          <MenuItem icon={ShieldCheck} title="Privasi" />
 
-          <SectionTitle title="Bantuan" />
-          <MenuItem icon={Headphones} title="Live Support" />
-          <MenuItem icon={Stethoscope} title="Diagnosis" />
-          <MenuItem icon={Trash2} title="Hapus Cache" />
-          <MenuItem icon={HelpCircle} title="FAQ" />
-          <MenuItem icon={Star} title="Beri Garuda Invest Rating" />
+              <h2 className="text-base font-bold text-gray-900 mb-0.5">{displayName}</h2>
+              <p className="text-[12px] text-gray-500 flex items-center gap-1.5 mt-1">
+                <Calendar className="w-3.5 h-3.5 text-gray-400" />
+                <span>Joined 10 Oktober 2025</span>
+              </p>
 
-          <SectionTitle title="Legal" />
-          <MenuItem icon={FileText} title="Syarat Penggunaan" />
-          <MenuItem icon={FileSignature} title="Kebijakan Privasi" />
+              <button
+                onClick={() => setSubView('edit')}
+                className="w-full mt-4 py-2 border border-gray-200 rounded-xl text-sm font-bold text-gray-800 hover:bg-gray-50 transition-colors text-center"
+              >
+                Atur Profil
+              </button>
+            </div>
 
-          <SectionTitle title="Login" />
-          <MenuItem icon={LogOut} title="Keluar" onClick={handleLogout} />
+            <div className="px-4 py-3 bg-white border-t border-b border-gray-100 flex items-center gap-3">
+              <div className="w-9 h-9 rounded-full overflow-hidden shrink-0">
+                <UserProfileAvatar avatarId={avatarId} customPhotoUrl={customPhotoUrl} size="sm" />
+              </div>
+              <div 
+                onClick={() => setShowCreatePost(true)}
+                className="flex-1 bg-gray-50 border border-gray-200 rounded-full px-4 py-2 text-xs text-gray-400 cursor-pointer hover:bg-gray-100 transition-colors"
+              >
+                Tulis ide kamu disini
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 px-4 py-3 bg-white overflow-x-auto no-scrollbar border-b border-gray-100">
+              {['Ideas', 'Replies', 'Notes', 'Saved', 'Charts', 'Prediksi', 'Polling', 'Liked'].map((tab) => {
+                const isActive = activeTab === tab;
+                return (
+                  <button
+                    key={tab}
+                    onClick={() => setActiveTab(tab)}
+                    className={cn(
+                      "px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-colors",
+                      isActive 
+                        ? "bg-[#00B26A]/10 text-[#00B26A] border border-[#00B26A]/30" 
+                        : "bg-gray-50 text-gray-600 border border-gray-200 hover:bg-gray-100"
+                    )}
+                  >
+                    {tab}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="px-4 py-3 bg-white border-b border-gray-100">
+              <div className="relative">
+                <Search className="w-4 h-4 text-gray-400 absolute left-3.5 top-3" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Cari Stream"
+                  className="w-full pl-10 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-900 focus:outline-none focus:border-[#00B26A]"
+                />
+              </div>
+            </div>
+
+            {userPosts.length > 0 ? (
+              <div className="divide-y divide-gray-100 bg-white">
+                {userPosts.map((post) => (
+                  <div key={post.id} className="p-4 hover:bg-gray-50/50 transition-colors">
+                    <div className="flex items-center gap-2.5 mb-2">
+                      <div className="w-9 h-9 rounded-full overflow-hidden shrink-0">
+                        <CatAvatar size="9" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[13px] font-bold text-gray-900">{post.author || username}</span>
+                          {post.sentiment && (
+                            <span className={cn(
+                              "text-[10px] font-bold px-1.5 py-0.5 rounded",
+                              post.sentiment === 'BULLISH' ? "bg-emerald-50 text-[#00B26A]" : "bg-rose-50 text-[#e11d48]"
+                            )}>
+                              {post.sentiment}
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-[11px] text-gray-400">{post.time || 'Baru saja'}</span>
+                      </div>
+                    </div>
+                    <p className="text-[13px] text-gray-800 leading-relaxed mb-3 whitespace-pre-line">
+                      {post.text}
+                    </p>
+                    {post.mediaUrl && (
+                      <div className="mb-3 rounded-xl overflow-hidden border border-gray-100 max-h-64 bg-gray-50">
+                        <img src={post.mediaUrl} alt="Post attachment" className="w-full h-full object-cover" />
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-16 px-4 text-center bg-white">
+                <div className="w-32 h-32 mb-4 relative flex items-center justify-center">
+                  <svg viewBox="0 0 200 200" className="w-full h-full text-[#00B26A]" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M40 90 L60 140 L140 140 L160 90 Z" fill="#F0FDF4" stroke="#00B26A" strokeWidth="3" />
+                    <path d="M30 90 L170 90 L160 70 L40 70 Z" fill="#DCFCE7" stroke="#00B26A" strokeWidth="3" />
+                    <line x1="100" y1="90" x2="100" y2="140" stroke="#00B26A" strokeWidth="2" strokeDasharray="4 4" />
+                    <path d="M100 90 Q110 50 140 30" stroke="#00B26A" strokeWidth="3" />
+                    <path d="M100 90 Q80 40 60 45" stroke="#00B26A" strokeWidth="3" />
+                    <ellipse cx="135" cy="35" rx="12" ry="7" fill="#DCFCE7" transform="rotate(-30 135 35)" />
+                    <ellipse cx="65" cy="45" rx="12" ry="7" fill="#DCFCE7" transform="rotate(30 65 45)" />
+                    <ellipse cx="105" cy="55" rx="10" ry="6" fill="#DCFCE7" transform="rotate(-15 105 55)" />
+                    <circle cx="50" cy="60" r="3" fill="#00B26A" />
+                    <circle cx="150" cy="110" r="3" fill="#00B26A" />
+                    <circle cx="160" cy="55" r="2.5" fill="#00B26A" />
+                    <circle cx="45" cy="120" r="2" fill="#00B26A" />
+                  </svg>
+                </div>
+
+                <p className="text-sm font-semibold text-gray-500 mb-4">Belum ada postingan</p>
+
+                <button 
+                  onClick={() => setShowCreatePost(true)}
+                  className="flex items-center gap-2 px-5 py-2.5 border border-[#00B26A] text-[#00B26A] font-bold rounded-xl text-xs hover:bg-green-50 transition-colors shadow-xs"
+                >
+                  <Edit3 className="w-4 h-4" />
+                  Tulis Postingan
+                </button>
+              </div>
+            )}
+          </div>
         </div>
+      )}
 
-        {/* Footer info */}
-        <div className="mt-8 mb-12 flex flex-col items-center gap-4">
-          <p className="text-[10px] font-bold text-secondary">© PT Garuda Invest Sekuritas Digital</p>
-          <div className="flex items-center gap-3">
-            <div className="flex h-7 w-7 items-center justify-center rounded-full bg-black text-white">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
-              </svg>
+      {/* CREATE POST MODAL */}
+      {showCreatePost && (
+        <CreatePostPage 
+          onClose={() => setShowCreatePost(false)} 
+        />
+      )}
+
+      {/* DEPOSIT QR MODAL (ALWAYS RENDERED REGARDLESS OF SUBVIEW) */}
+      {showDepositModal && (
+        <div className="fixed inset-0 z-[90] bg-black/60 flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl w-full max-w-md overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 bg-gray-50">
+              <div className="flex items-center gap-2">
+                <QrCode className="w-5 h-5 text-[#00B26A]" />
+                <h3 className="text-base font-bold text-gray-900">Deposit QR & Bank Jago</h3>
+              </div>
+              <button 
+                onClick={() => { setShowDepositModal(false); setShowBankJagoSim(false); }}
+                className="p-1.5 text-gray-400 hover:text-gray-700 rounded-full hover:bg-gray-200 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
-            <div className="flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-tr from-yellow-400 via-red-500 to-purple-500 text-white">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect>
-                <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path>
-                <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line>
-              </svg>
-            </div>
-            <div className="flex h-7 w-7 items-center justify-center rounded-full bg-black text-white">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.15 1.07-.14 1.61.24 1.64 1.82 3.02 3.5 2.87 1.12-.01 2.19-.66 2.77-1.61.19-.33.4-.67.41-1.06.1-1.79.06-3.57.07-5.36.01-4.03-.01-8.05.02-12.07z"/>
-              </svg>
+
+            <div className="p-6 overflow-y-auto space-y-5">
+              {!activeTx ? (
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-1.5">Pilih Nominal Deposit (IDR)</label>
+                    <div className="grid grid-cols-3 gap-2 mb-3">
+                      {[100000, 500000, 1000000, 2500000, 5000000, 10000000].map((amt) => (
+                        <button
+                          key={amt}
+                          onClick={() => setDepositAmount(amt)}
+                          className={cn(
+                            "py-2 px-3 rounded-xl border text-xs font-bold transition-all cursor-pointer",
+                            depositAmount === amt 
+                              ? "border-[#00B26A] bg-green-50 text-[#00B26A] shadow-xs" 
+                              : "border-gray-200 text-gray-700 hover:border-gray-300 bg-white"
+                          )}
+                        >
+                          Rp {(amt >= 1000000 ? `${amt / 1000000}jt` : `${amt / 1000}rb`)}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="relative">
+                      <span className="absolute left-3 top-2.5 text-xs font-bold text-gray-400">Rp</span>
+                      <input
+                        type="number"
+                        value={depositAmount}
+                        onChange={(e) => setDepositAmount(Number(e.target.value))}
+                        className="w-full pl-9 pr-3 py-2.5 text-sm font-bold border border-gray-200 rounded-xl focus:outline-none focus:border-[#00B26A]"
+                        placeholder="Nominal custom..."
+                      />
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={handleCreateDepositQR}
+                    className="w-full py-3.5 bg-[#00B26A] text-white font-bold rounded-xl shadow-md hover:bg-[#009E5E] transition-colors flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <QrCode className="w-5 h-5" />
+                    Buat QR Pembayaran
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-4 text-center">
+                  <div className="inline-block p-4 bg-white border-2 border-gray-100 rounded-2xl shadow-inner">
+                    <QRCodeSVG
+                      value={`GARUDA_INVES_DEPOSIT|${activeTx.transactionId}|${activeTx.receiverUid}|${activeTx.amount}`}
+                      size={200}
+                      level="M"
+                      includeMargin={true}
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <p className="text-xs text-gray-500">Transaction ID</p>
+                    <p className="text-sm font-mono font-bold text-gray-900 bg-gray-100 py-1 px-3 rounded-lg inline-block">
+                      {activeTx.transactionId}
+                    </p>
+                    <p className="text-xs font-bold text-[#00B26A] pt-1">
+                      Nominal: Rp {activeTx.amount.toLocaleString('id-ID')}
+                    </p>
+                  </div>
+
+                  {activeTx.status === 'completed' ? (
+                    <div className="p-4 bg-green-50 border border-green-200 rounded-xl text-green-800 text-xs font-bold flex flex-col items-center justify-center gap-2">
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="w-5 h-5 text-green-600" />
+                        <span>Deposit Sukses! Saldo telah bertambah Rp {activeTx.amount.toLocaleString('id-ID')}</span>
+                      </div>
+                      <button
+                        onClick={() => { setShowDepositModal(false); setShowBankJagoSim(false); }}
+                        className="mt-2 px-4 py-2 bg-[#00B26A] text-white rounded-lg text-xs font-bold hover:bg-[#009E5E]"
+                      >
+                        Selesai & Lihat Saldo
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-2.5">
+                      <button
+                        onClick={() => handleBankJagoConfirm('success')}
+                        className="w-full py-3.5 bg-[#00B26A] text-white font-bold rounded-xl shadow-md hover:bg-[#009E5E] transition-colors flex items-center justify-center gap-2 cursor-pointer"
+                      >
+                        <CheckCircle className="w-5 h-5" />
+                        Simulasikan Scan & Bayar Instan (Rp {activeTx.amount.toLocaleString('id-ID')})
+                      </button>
+                      <button
+                        onClick={() => setShowBankJagoSim(true)}
+                        className="w-full py-3 bg-orange-500 text-white font-bold rounded-xl shadow-xs hover:bg-orange-600 transition-colors flex items-center justify-center gap-2 cursor-pointer"
+                      >
+                        <Landmark className="w-5 h-5" />
+                        Buka Bank Jago Simulator
+                      </button>
+                      <button
+                        onClick={() => setActiveTx(null)}
+                        className="w-full py-2.5 border border-gray-200 text-gray-600 font-bold rounded-xl text-xs hover:bg-gray-50 cursor-pointer"
+                      >
+                        Buat QR Baru / Ganti Nominal
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
-          <p className="text-[10px] text-gray-400">Version : 3.22.0 (11336)</p>
         </div>
-      </div>
+      )}
+
+      {/* BANK JAGO SIMULATION MODAL */}
+      {showBankJagoSim && activeTx && (
+        <div className="fixed inset-0 z-[100] bg-black/70 flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl w-full max-w-md overflow-hidden shadow-2xl flex flex-col">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-orange-100 bg-orange-50">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-full bg-orange-500 text-white font-bold flex items-center justify-center text-xs">J</div>
+                <div>
+                  <h3 className="text-sm font-bold text-gray-900">Bank Jago Simulator</h3>
+                  <p className="text-[10px] text-orange-700">Konfirmasi Pembayaran Deposit</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setShowBankJagoSim(false)}
+                className="p-1.5 text-gray-400 hover:text-gray-700 rounded-full hover:bg-orange-200"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4 text-xs">
+              <div className="p-3 bg-gray-50 rounded-xl border border-gray-100 flex items-center justify-between">
+                <div>
+                  <p className="text-gray-500">Saldo Bank Jago</p>
+                  <p className="text-sm font-bold text-gray-900">Rp {bankJagoBalance.toLocaleString('id-ID')}</p>
+                </div>
+                <span className="text-[10px] bg-orange-100 text-orange-800 font-bold px-2 py-1 rounded">Active</span>
+              </div>
+
+              <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-100 flex items-center justify-between">
+                <div>
+                  <p className="text-gray-500">Tagihan Deposit</p>
+                  <p className="text-sm font-bold text-[#00B26A]">Rp {activeTx.amount.toLocaleString('id-ID')}</p>
+                </div>
+                <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-1 rounded">Pending</span>
+              </div>
+
+              {simError && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-red-700 flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span>{simError}</span>
+                </div>
+              )}
+
+              {simSuccess && (
+                <div className="p-3 bg-green-50 border border-green-200 rounded-xl text-green-700 flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 shrink-0" />
+                  <span>{simSuccess}</span>
+                </div>
+              )}
+
+              <div className="space-y-2 pt-2">
+                <button
+                  onClick={() => handleBankJagoConfirm('success')}
+                  className="w-full py-3 bg-orange-500 text-white font-bold rounded-xl shadow-xs hover:bg-orange-600 transition-colors cursor-pointer"
+                >
+                  Bayar Sekarang (Rp {activeTx.amount.toLocaleString('id-ID')})
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* RIWAYAT / TRANSACTION HISTORY MODAL */}
+      {showHistory && (
+        <div className="fixed inset-0 z-[90] bg-black/60 flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl w-full max-w-md overflow-hidden shadow-2xl flex flex-col max-h-[85vh]">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 bg-gray-50">
+              <div className="flex items-center gap-2">
+                <Clock className="w-5 h-5 text-[#00B26A]" />
+                <h3 className="text-base font-bold text-gray-900">Riwayat Transaksi</h3>
+              </div>
+              <button 
+                onClick={() => setShowHistory(false)}
+                className="p-1.5 text-gray-400 hover:text-gray-700 rounded-full hover:bg-gray-200"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* History Tabs */}
+            <div className="flex border-b border-gray-100 bg-gray-50/50">
+              <button
+                onClick={() => setHistoryTab('deposit')}
+                className={cn(
+                  "flex-1 py-3 text-xs font-bold text-center border-b-2 transition-colors cursor-pointer",
+                  historyTab === 'deposit' 
+                    ? "border-[#00B26A] text-[#00B26A] bg-white" 
+                    : "border-transparent text-gray-500 hover:text-gray-800"
+                )}
+              >
+                Deposit
+              </button>
+              <button
+                onClick={() => setHistoryTab('withdrawal')}
+                className={cn(
+                  "flex-1 py-3 text-xs font-bold text-center border-b-2 transition-colors cursor-pointer",
+                  historyTab === 'withdrawal' 
+                    ? "border-[#00B26A] text-[#00B26A] bg-white" 
+                    : "border-transparent text-gray-500 hover:text-gray-800"
+                )}
+              >
+                Penarikan (Withdraw)
+              </button>
+            </div>
+
+            <div className="p-4 overflow-y-auto space-y-3 flex-1 min-h-[250px]">
+              {txHistoryList.filter(tx => historyTab === 'deposit' ? tx.type === 'deposit' : tx.type === 'withdrawal' || tx.type === 'withdraw').length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12 text-center text-gray-400">
+                  <Clock className="w-10 h-10 mb-2 stroke-1" />
+                  <p className="text-xs font-medium">Belum ada riwayat {historyTab}</p>
+                </div>
+              ) : (
+                txHistoryList
+                  .filter(tx => historyTab === 'deposit' ? tx.type === 'deposit' : tx.type === 'withdrawal' || tx.type === 'withdraw')
+                  .map((tx, idx) => (
+                    <div key={tx.id || idx} className="p-3.5 rounded-xl border border-gray-100 bg-gray-50/50 flex items-center justify-between">
+                      <div className="space-y-1">
+                        <p className="text-xs font-bold text-gray-900">{tx.description || (tx.type === 'deposit' ? 'Deposit RDN / Bank Jago' : 'Penarikan ke Bank')}</p>
+                        <p className="text-[10px] text-gray-400">
+                          {tx.createdAt ? new Date(tx.createdAt).toLocaleString('id-ID') : 'Baru saja'}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-xs font-bold text-gray-900">
+                          +Rp {Number(tx.amount || 0).toLocaleString('id-ID')}
+                        </p>
+                        <span className="inline-block text-[9px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 mt-1">
+                          {tx.status || 'Sukses'}
+                        </span>
+                      </div>
+                    </div>
+                  ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 6. UBAH FOTO PROFIL MODAL / BOTTOM SHEET */}
+      {showAvatarModal && (
+        <AvatarSelectorModal
+          currentAvatarId={avatarId}
+          currentCustomPhoto={customPhotoUrl}
+          onClose={() => setShowAvatarModal(false)}
+          onSave={handleSaveAvatar}
+        />
+      )}
     </div>
   );
 }
