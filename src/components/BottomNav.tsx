@@ -17,7 +17,7 @@ const tabs = [
 
 export function BottomNav({ activeTab, onChange }: BottomNavProps) {
   return (
-    <div className="flex min-h-[64px] w-full items-center justify-around border-t border-border bg-white px-2 pt-2 pb-[max(env(safe-area-inset-bottom),12px)] shrink-0 z-50">
+    <nav className="flex h-14 w-full items-center justify-around border-t border-gray-100 bg-white px-2 shrink-0 z-40 select-none">
       {tabs.map((tab) => {
         const Icon = tab.icon;
         const isActive = activeTab === tab.id;
@@ -26,15 +26,23 @@ export function BottomNav({ activeTab, onChange }: BottomNavProps) {
             key={tab.id}
             onClick={() => onChange(tab.id)}
             className={cn(
-              "flex flex-col items-center justify-center gap-1 w-16 transition-colors",
-              isActive ? "text-primary" : "text-gray-400 hover:text-gray-600"
+              "flex flex-col items-center justify-center gap-0.5 w-16 py-1 transition-all active:scale-95",
+              isActive ? "text-[#00AA5B]" : "text-gray-400 hover:text-gray-600"
             )}
           >
-            <Icon className="h-6 w-6" strokeWidth={isActive ? 2.5 : 2} />
-            <span className="text-[10px] font-medium">{tab.label}</span>
+            <Icon 
+              className={cn("h-5 w-5 transition-transform", isActive ? "stroke-[#00AA5B]" : "stroke-gray-400")} 
+              strokeWidth={isActive ? 2.2 : 1.75} 
+            />
+            <span className={cn(
+              "text-[10px] tracking-tight leading-tight",
+              isActive ? "font-bold text-[#00AA5B]" : "font-normal text-gray-500"
+            )}>
+              {tab.label}
+            </span>
           </button>
         );
       })}
-    </div>
+    </nav>
   );
 }

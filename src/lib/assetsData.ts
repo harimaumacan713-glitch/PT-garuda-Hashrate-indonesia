@@ -175,6 +175,37 @@ export const LOGO_KLBF = svgDataUri(`
 </svg>
 `);
 
+export const LOGO_TPIA = svgDataUri(`
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">
+  <defs>
+    <linearGradient id="tpia_grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#006699"/>
+      <stop offset="100%" stop-color="#009966"/>
+    </linearGradient>
+  </defs>
+  <circle cx="50" cy="50" r="48" fill="url(#tpia_grad)"/>
+  <!-- Chandra Asri Chemical Molecule Arc -->
+  <circle cx="50" cy="40" r="16" fill="none" stroke="#FFFFFF" stroke-width="4"/>
+  <circle cx="50" cy="40" r="8" fill="#FFFFFF"/>
+  <circle cx="34" cy="54" r="5" fill="#A8FFD4"/>
+  <circle cx="66" cy="54" r="5" fill="#A8FFD4"/>
+  <line x1="40" y1="48" x2="34" y2="54" stroke="#FFFFFF" stroke-width="3"/>
+  <line x1="60" y1="48" x2="66" y2="54" stroke="#FFFFFF" stroke-width="3"/>
+  <text x="50" y="78" fill="#FFFFFF" font-family="'Helvetica Neue', Arial, sans-serif" font-size="14" font-weight="900" text-anchor="middle" letter-spacing="1">TPIA</text>
+</svg>
+`);
+
+export const LOGO_SMGR = svgDataUri(`
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">
+  <circle cx="50" cy="50" r="48" fill="#CC0000"/>
+  <!-- Semen Indonesia SIG Hexagon Emblem -->
+  <polygon points="50,22 72,35 72,61 50,74 28,61 28,35" fill="#FFFFFF"/>
+  <polygon points="50,28 66,38 66,58 50,68 34,58 34,38" fill="#CC0000"/>
+  <text x="50" y="54" fill="#FFFFFF" font-family="Arial, sans-serif" font-size="12" font-weight="900" text-anchor="middle">SIG</text>
+  <text x="50" y="86" fill="#FFFFFF" font-family="Arial, sans-serif" font-size="10" font-weight="900" text-anchor="middle">SMGR</text>
+</svg>
+`);
+
 export const LOGO_LABA = svgDataUri(`
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">
   <circle cx="50" cy="50" r="48" fill="#059669"/>
@@ -552,6 +583,19 @@ export const LOGO_EURUSD = svgDataUri(`
 // MASTER ASSET DATABASE & LOGO RESOLVER
 // ==========================================
 
+export type IDXSector = 
+  | 'BASIC-IND'
+  | 'CYCLICAL'
+  | 'ENERGY'
+  | 'FINANCE'
+  | 'HEALTH'
+  | 'INDUSTRIAL'
+  | 'INFRASTRUC'
+  | 'NON-CYCLICAL'
+  | 'PROPERTY'
+  | 'TRANSPORT'
+  | 'TECHNOLOGY';
+
 export interface AssetMeta {
   symbol: string;
   name: string;
@@ -560,69 +604,146 @@ export interface AssetMeta {
   basePrice: number;
   currency: 'IDR' | 'USD';
   sector?: string;
+  idxSector?: IDXSector;
   marketCap?: string;
+  indices?: string[];
+  specialBoards?: string[];
 }
 
 export type GlobalAssetItem = AssetMeta;
 
 export const ALL_GLOBAL_ASSETS: AssetMeta[] = [
-  // SAHAM INDONESIA (IDX)
-  { symbol: 'BBCA', name: 'PT Bank Central Asia Tbk', category: 'Saham IDX', logo: LOGO_BBCA, basePrice: 6350, currency: 'IDR', sector: 'Financials / Banking', marketCap: 'Rp 1.189 T' },
-  { symbol: 'BBRI', name: 'PT Bank Rakyat Indonesia (Persero) Tbk', category: 'Saham IDX', logo: LOGO_BBRI, basePrice: 3120, currency: 'IDR', sector: 'Financials / Micro Banking', marketCap: 'Rp 542 T' },
-  { symbol: 'BMRI', name: 'PT Bank Mandiri (Persero) Tbk', category: 'Saham IDX', logo: LOGO_BMRI, basePrice: 4170, currency: 'IDR', sector: 'Financials / Corporate Banking', marketCap: 'Rp 483 T' },
-  { symbol: 'BBNI', name: 'PT Bank Negara Indonesia (Persero) Tbk', category: 'Saham IDX', logo: LOGO_BBNI, basePrice: 3630, currency: 'IDR', sector: 'Financials / Banking', marketCap: 'Rp 135 T' },
-  { symbol: 'TLKM', name: 'PT Telkom Indonesia (Persero) Tbk', category: 'Saham IDX', logo: LOGO_TLKM, basePrice: 2620, currency: 'IDR', sector: 'Telecommunications', marketCap: 'Rp 259 T' },
-  { symbol: 'ASII', name: 'PT Astra International Tbk', category: 'Saham IDX', logo: LOGO_ASII, basePrice: 4780, currency: 'IDR', sector: 'Conglomerates & Automotive', marketCap: 'Rp 193 T' },
-  { symbol: 'BREN', name: 'PT Barito Renewables Energy Tbk', category: 'Saham IDX', logo: LOGO_BREN, basePrice: 3570, currency: 'IDR', sector: 'Renewable Energy', marketCap: 'Rp 477 T' },
-  { symbol: 'AMMN', name: 'PT Amman Mineral Internasional Tbk', category: 'Saham IDX', logo: LOGO_AMMN, basePrice: 4270, currency: 'IDR', sector: 'Basic Materials / Mining', marketCap: 'Rp 309 T' },
-  { symbol: 'GOTO', name: 'PT GoTo Gojek Tokopedia Tbk', category: 'Saham IDX', logo: LOGO_GOTO, basePrice: 50, currency: 'IDR', sector: 'Technology & Digital Ecosystem', marketCap: 'Rp 60 T' },
-  { symbol: 'ICBP', name: 'PT Indofood CBP Sukses Makmur Tbk', category: 'Saham IDX', logo: LOGO_ICBP, basePrice: 7600, currency: 'IDR', sector: 'Consumer Non-Cyclicals', marketCap: 'Rp 88 T' },
-  { symbol: 'ANTM', name: 'PT Aneka Tambang Tbk', category: 'Saham IDX', logo: LOGO_ANTM, basePrice: 3070, currency: 'IDR', sector: 'Basic Materials / Gold & Nickel', marketCap: 'Rp 73 T' },
-  { symbol: 'ADRO', name: 'PT Alamtri Resources Indonesia (Adaro) Tbk', category: 'Saham IDX', logo: LOGO_ADRO, basePrice: 2530, currency: 'IDR', sector: 'Energy & Coal', marketCap: 'Rp 78 T' },
-  { symbol: 'PTBA', name: 'PT Bukit Asam Tbk', category: 'Saham IDX', logo: LOGO_PTBA, basePrice: 2360, currency: 'IDR', sector: 'Energy & Coal', marketCap: 'Rp 27 T' },
-  { symbol: 'UNVR', name: 'PT Unilever Indonesia Tbk', category: 'Saham IDX', logo: LOGO_UNVR, basePrice: 1775, currency: 'IDR', sector: 'Consumer Goods', marketCap: 'Rp 67 T' },
-  { symbol: 'KLBF', name: 'PT Kalbe Farma Tbk', category: 'Saham IDX', logo: LOGO_KLBF, basePrice: 800, currency: 'IDR', sector: 'Healthcare & Pharma', marketCap: 'Rp 37 T' },
-  { symbol: 'LABA', name: 'Green Power Group Tbk', category: 'Saham IDX', logo: LOGO_LABA, basePrice: 160, currency: 'IDR', sector: 'Renewable Energy', marketCap: 'Rp 1.2 T' },
+  // ==========================================
+  // SAHAM INDONESIA (IDX) - 11 SEKTOR RESMI
+  // ==========================================
 
+  // 1. BASIC-IND (Bahan Baku & Tambang Mineral)
+  { symbol: 'ANTM', name: 'PT Aneka Tambang Tbk', category: 'Saham IDX', logo: LOGO_ANTM, basePrice: 3070, currency: 'IDR', sector: 'Basic Materials', idxSector: 'BASIC-IND', marketCap: 'Rp 73 T', indices: ['IDX30', 'LQ45', 'SRI-KEHATI', 'JII', 'ISSI', 'KOMPAS100', 'IHSG'], specialBoards: ['Day Trade'] },
+  { symbol: 'AMMN', name: 'PT Amman Mineral Internasional Tbk', category: 'Saham IDX', logo: LOGO_AMMN, basePrice: 4270, currency: 'IDR', sector: 'Basic Materials', idxSector: 'BASIC-IND', marketCap: 'Rp 309 T', indices: ['IDX30', 'LQ45', 'ISSI', 'KOMPAS100', 'IHSG'], specialBoards: ['Day Trade'] },
+  { symbol: 'INCO', name: 'PT Vale Indonesia Tbk', category: 'Saham IDX', logo: generateFallbackBadge('INCO'), basePrice: 5225, currency: 'IDR', sector: 'Basic Materials', idxSector: 'BASIC-IND', marketCap: 'Rp 52 T', indices: ['LQ45', 'JII', 'ISSI', 'KOMPAS100', 'IHSG'], specialBoards: ['Day Trade'] },
+  { symbol: 'TPIA', name: 'PT Chandra Asri Pacific Tbk', category: 'Saham IDX', logo: LOGO_TPIA, basePrice: 2010, currency: 'IDR', sector: 'Basic Materials', idxSector: 'BASIC-IND', marketCap: 'Rp 174 T', indices: ['KOMPAS100', 'IHSG'], specialBoards: ['Day Trade'] },
+  { symbol: 'INKP', name: 'PT Indah Kiat Pulp & Paper Tbk', category: 'Saham IDX', logo: generateFallbackBadge('INKP'), basePrice: 8500, currency: 'IDR', sector: 'Basic Materials', idxSector: 'BASIC-IND', marketCap: 'Rp 46 T', indices: ['LQ45', 'JII', 'ISSI', 'KOMPAS100', 'IHSG'], specialBoards: ['Day Trade'] },
+  { symbol: 'TKIM', name: 'PT Pabrik Kertas Tjiwi Kimia Tbk', category: 'Saham IDX', logo: generateFallbackBadge('TKIM'), basePrice: 7600, currency: 'IDR', sector: 'Basic Materials', idxSector: 'BASIC-IND', marketCap: 'Rp 24 T', indices: ['LQ45', 'JII', 'ISSI', 'KOMPAS100', 'IHSG'], specialBoards: ['Day Trade'] },
+  { symbol: 'MDKA', name: 'PT Merdeka Copper Gold Tbk', category: 'Saham IDX', logo: generateFallbackBadge('MDKA'), basePrice: 2900, currency: 'IDR', sector: 'Basic Materials', idxSector: 'BASIC-IND', marketCap: 'Rp 70 T', indices: ['LQ45', 'ISSI', 'KOMPAS100', 'IHSG'], specialBoards: ['Day Trade'] },
+  { symbol: 'SMGR', name: 'PT Semen Indonesia (Persero) Tbk', category: 'Saham IDX', logo: LOGO_SMGR, basePrice: 1580, currency: 'IDR', sector: 'Basic Materials', idxSector: 'BASIC-IND', marketCap: 'Rp 10.7 T', indices: ['IDX30', 'LQ45', 'ISSI', 'KOMPAS100', 'IHSG'], specialBoards: ['Day Trade'] },
+
+  // 2. CYCLICAL (Barang Konsumen Siklikal)
+  { symbol: 'CNMA', name: 'PT Nusantara Sejahtera Raya (Cinema XXI) Tbk', category: 'Saham IDX', logo: generateFallbackBadge('CNMA'), basePrice: 95, currency: 'IDR', sector: 'Consumer Cyclicals', idxSector: 'CYCLICAL', marketCap: 'Rp 7.9 T', indices: ['ISSI', 'KOMPAS100', 'IHSG'], specialBoards: ['Day Trade'] },
+  { symbol: 'MAPI', name: 'PT Mitra Adiperkasa Tbk', category: 'Saham IDX', logo: generateFallbackBadge('MAPI'), basePrice: 1495, currency: 'IDR', sector: 'Consumer Cyclicals', idxSector: 'CYCLICAL', marketCap: 'Rp 24.8 T', indices: ['LQ45', 'JII', 'ISSI', 'KOMPAS100', 'IHSG'], specialBoards: ['Day Trade'] },
+  { symbol: 'ACES', name: 'PT Aspirasi Hidup Indonesia (Ace) Tbk', category: 'Saham IDX', logo: generateFallbackBadge('ACES'), basePrice: 354, currency: 'IDR', sector: 'Consumer Cyclicals', idxSector: 'CYCLICAL', marketCap: 'Rp 6.1 T', indices: ['LQ45', 'SRI-KEHATI', 'JII', 'ISSI', 'KOMPAS100', 'IHSG'], specialBoards: ['Day Trade'] },
+  { symbol: 'ERAA', name: 'PT Erajaya Swasembada Tbk', category: 'Saham IDX', logo: generateFallbackBadge('ERAA'), basePrice: 458, currency: 'IDR', sector: 'Consumer Cyclicals', idxSector: 'CYCLICAL', marketCap: 'Rp 7.3 T', indices: ['ISSI', 'KOMPAS100', 'IHSG'], specialBoards: ['Day Trade'] },
+  { symbol: 'AUTO', name: 'PT Astra Otoparts Tbk', category: 'Saham IDX', logo: generateFallbackBadge('AUTO'), basePrice: 2900, currency: 'IDR', sector: 'Consumer Cyclicals', idxSector: 'CYCLICAL', marketCap: 'Rp 14.0 T', indices: ['SRI-KEHATI', 'ISSI', 'KOMPAS100', 'IHSG'], specialBoards: ['Day Trade'] },
+
+  // 3. ENERGY (Energi & Batu Bara & Migas)
+  { symbol: 'ADRO', name: 'PT Alamtri Resources Indonesia (Adaro) Tbk', category: 'Saham IDX', logo: LOGO_ADRO, basePrice: 2530, currency: 'IDR', sector: 'Energy & Coal', idxSector: 'ENERGY', marketCap: 'Rp 78 T', indices: ['IDX30', 'LQ45', 'SRI-KEHATI', 'JII', 'ISSI', 'KOMPAS100', 'IHSG'], specialBoards: ['Day Trade'] },
+  { symbol: 'PTBA', name: 'PT Bukit Asam Tbk', category: 'Saham IDX', logo: LOGO_PTBA, basePrice: 2360, currency: 'IDR', sector: 'Energy & Coal', idxSector: 'ENERGY', marketCap: 'Rp 27 T', indices: ['IDX30', 'LQ45', 'JII', 'ISSI', 'KOMPAS100', 'IHSG'], specialBoards: ['Day Trade'] },
+  { symbol: 'PGAS', name: 'PT Perusahaan Gas Negara Tbk', category: 'Saham IDX', logo: generateFallbackBadge('PGAS'), basePrice: 1495, currency: 'IDR', sector: 'Energy & Utilities', idxSector: 'ENERGY', marketCap: 'Rp 36.2 T', indices: ['IDX30', 'LQ45', 'SRI-KEHATI', 'JII', 'ISSI', 'KOMPAS100', 'IHSG'], specialBoards: ['Day Trade'] },
+  { symbol: 'MEDC', name: 'PT Medco Energi Internasional Tbk', category: 'Saham IDX', logo: generateFallbackBadge('MEDC'), basePrice: 1315, currency: 'IDR', sector: 'Energy & Oil/Gas', idxSector: 'ENERGY', marketCap: 'Rp 33.1 T', indices: ['LQ45', 'JII', 'ISSI', 'KOMPAS100', 'IHSG'], specialBoards: ['Day Trade'] },
+  { symbol: 'AKRA', name: 'PT AKR Corporindo Tbk', category: 'Saham IDX', logo: generateFallbackBadge('AKRA'), basePrice: 1400, currency: 'IDR', sector: 'Energy & Distribution', idxSector: 'ENERGY', marketCap: 'Rp 28.1 T', indices: ['LQ45', 'SRI-KEHATI', 'JII', 'ISSI', 'KOMPAS100', 'IHSG'], specialBoards: ['Day Trade'] },
+  { symbol: 'BREN', name: 'PT Barito Renewables Energy Tbk', category: 'Saham IDX', logo: LOGO_BREN, basePrice: 3570, currency: 'IDR', sector: 'Renewable Energy', idxSector: 'ENERGY', marketCap: 'Rp 477 T', indices: ['KOMPAS100', 'IHSG'], specialBoards: ['Day Trade', 'Trading Limit'] },
+
+  // 4. FINANCE (Keuangan & Perbankan)
+  { symbol: 'BBCA', name: 'PT Bank Central Asia Tbk', category: 'Saham IDX', logo: LOGO_BBCA, basePrice: 6350, currency: 'IDR', sector: 'Financials / Banking', idxSector: 'FINANCE', marketCap: 'Rp 782 T', indices: ['IDX30', 'LQ45', 'SRI-KEHATI', 'KOMPAS100', 'IHSG'], specialBoards: ['Day Trade'] },
+  { symbol: 'BBRI', name: 'PT Bank Rakyat Indonesia (Persero) Tbk', category: 'Saham IDX', logo: LOGO_BBRI, basePrice: 3120, currency: 'IDR', sector: 'Financials / Banking', idxSector: 'FINANCE', marketCap: 'Rp 473 T', indices: ['IDX30', 'LQ45', 'SRI-KEHATI', 'KOMPAS100', 'IHSG'], specialBoards: ['Day Trade'] },
+  { symbol: 'BMRI', name: 'PT Bank Mandiri (Persero) Tbk', category: 'Saham IDX', logo: LOGO_BMRI, basePrice: 4170, currency: 'IDR', sector: 'Financials / Banking', idxSector: 'FINANCE', marketCap: 'Rp 389 T', indices: ['IDX30', 'LQ45', 'SRI-KEHATI', 'KOMPAS100', 'IHSG'], specialBoards: ['Day Trade'] },
+  { symbol: 'BBNI', name: 'PT Bank Negara Indonesia (Persero) Tbk', category: 'Saham IDX', logo: LOGO_BBNI, basePrice: 3630, currency: 'IDR', sector: 'Financials / Banking', idxSector: 'FINANCE', marketCap: 'Rp 135 T', indices: ['IDX30', 'LQ45', 'SRI-KEHATI', 'KOMPAS100', 'IHSG'], specialBoards: ['Day Trade'] },
+  { symbol: 'BBTN', name: 'PT Bank Tabungan Negara (Persero) Tbk', category: 'Saham IDX', logo: generateFallbackBadge('BBTN'), basePrice: 1220, currency: 'IDR', sector: 'Financials / Banking', idxSector: 'FINANCE', marketCap: 'Rp 17.1 T', indices: ['LQ45', 'KOMPAS100', 'IHSG'], specialBoards: ['Day Trade'] },
+  { symbol: 'BDMN', name: 'PT Bank Danamon Indonesia Tbk', category: 'Saham IDX', logo: generateFallbackBadge('BDMN'), basePrice: 4150, currency: 'IDR', sector: 'Financials / Banking', idxSector: 'FINANCE', marketCap: 'Rp 40.6 T', indices: ['KOMPAS100', 'IHSG'], specialBoards: ['Day Trade'] },
+  { symbol: 'BRIS', name: 'PT Bank Syariah Indonesia Tbk', category: 'Saham IDX', logo: generateFallbackBadge('BRIS'), basePrice: 1790, currency: 'IDR', sector: 'Financials / Islamic Banking', idxSector: 'FINANCE', marketCap: 'Rp 82.6 T', indices: ['LQ45', 'JII', 'ISSI', 'KOMPAS100', 'IHSG'], specialBoards: ['Day Trade'] },
+
+  // 5. HEALTH (Kesehatan & Farmasi & Rumah Sakit)
+  { symbol: 'KLBF', name: 'PT Kalbe Farma Tbk', category: 'Saham IDX', logo: LOGO_KLBF, basePrice: 800, currency: 'IDR', sector: 'Healthcare & Pharma', idxSector: 'HEALTH', marketCap: 'Rp 37.5 T', indices: ['IDX30', 'LQ45', 'SRI-KEHATI', 'JII', 'ISSI', 'KOMPAS100', 'IHSG'], specialBoards: ['Day Trade'] },
+  { symbol: 'MIKA', name: 'PT Mitra Keluarga Karyasehat Tbk', category: 'Saham IDX', logo: generateFallbackBadge('MIKA'), basePrice: 1760, currency: 'IDR', sector: 'Healthcare / Hospitals', idxSector: 'HEALTH', marketCap: 'Rp 25.1 T', indices: ['LQ45', 'SRI-KEHATI', 'JII', 'ISSI', 'KOMPAS100', 'IHSG'], specialBoards: ['Day Trade'] },
+  { symbol: 'HEAL', name: 'PT Medikaloka Hermina Tbk', category: 'Saham IDX', logo: generateFallbackBadge('HEAL'), basePrice: 710, currency: 'IDR', sector: 'Healthcare / Hospitals', idxSector: 'HEALTH', marketCap: 'Rp 10.7 T', indices: ['ISSI', 'KOMPAS100', 'IHSG'], specialBoards: ['Day Trade'] },
+  { symbol: 'SIDO', name: 'PT Industri Jamu dan Farmasi Sido Muncul Tbk', category: 'Saham IDX', logo: generateFallbackBadge('SIDO'), basePrice: 346, currency: 'IDR', sector: 'Healthcare / Herbal Pharma', idxSector: 'HEALTH', marketCap: 'Rp 10.4 T', indices: ['SRI-KEHATI', 'JII', 'ISSI', 'KOMPAS100', 'IHSG'], specialBoards: ['Day Trade'] },
+  { symbol: 'SILO', name: 'PT Siloam International Hospitals Tbk', category: 'Saham IDX', logo: generateFallbackBadge('SILO'), basePrice: 2220, currency: 'IDR', sector: 'Healthcare / Hospitals', idxSector: 'HEALTH', marketCap: 'Rp 28.9 T', indices: ['KOMPAS100', 'IHSG'], specialBoards: ['Day Trade'] },
+
+  // 6. INDUSTRIAL (Perindustrian & Alat Berat)
+  { symbol: 'ASII', name: 'PT Astra International Tbk', category: 'Saham IDX', logo: LOGO_ASII, basePrice: 4780, currency: 'IDR', sector: 'Industrials / Conglomerates', idxSector: 'INDUSTRIAL', marketCap: 'Rp 193 T', indices: ['IDX30', 'LQ45', 'SRI-KEHATI', 'KOMPAS100', 'IHSG'], specialBoards: ['Day Trade'] },
+  { symbol: 'UNTR', name: 'PT United Tractors Tbk', category: 'Saham IDX', logo: generateFallbackBadge('UNTR'), basePrice: 23275, currency: 'IDR', sector: 'Industrials / Heavy Equipment', idxSector: 'INDUSTRIAL', marketCap: 'Rp 86.8 T', indices: ['IDX30', 'LQ45', 'SRI-KEHATI', 'JII', 'ISSI', 'KOMPAS100', 'IHSG'], specialBoards: ['Day Trade'] },
+  { symbol: 'HEXA', name: 'PT Hexindo Adiperkasa Tbk', category: 'Saham IDX', logo: generateFallbackBadge('HEXA'), basePrice: 4410, currency: 'IDR', sector: 'Industrials / Heavy Machinery', idxSector: 'INDUSTRIAL', marketCap: 'Rp 3.7 T', indices: ['KOMPAS100', 'IHSG'], specialBoards: ['Day Trade'] },
+  { symbol: 'ARNA', name: 'PT Arwana Citramulia Tbk', category: 'Saham IDX', logo: generateFallbackBadge('ARNA'), basePrice: 498, currency: 'IDR', sector: 'Industrials / Building Materials', idxSector: 'INDUSTRIAL', marketCap: 'Rp 3.6 T', indices: ['ISSI', 'KOMPAS100', 'IHSG'], specialBoards: ['Day Trade'] },
+
+  // 7. INFRASTRUC (Infrastruktur & Telekomunikasi & Jalan Tol)
+  { symbol: 'TLKM', name: 'PT Telkom Indonesia (Persero) Tbk', category: 'Saham IDX', logo: LOGO_TLKM, basePrice: 2620, currency: 'IDR', sector: 'Infrastructure / Telco', idxSector: 'INFRASTRUC', marketCap: 'Rp 259 T', indices: ['IDX30', 'LQ45', 'SRI-KEHATI', 'JII', 'ISSI', 'KOMPAS100', 'IHSG'], specialBoards: ['Day Trade'] },
+  { symbol: 'ISAT', name: 'PT Indosat Ooredoo Hutchison Tbk', category: 'Saham IDX', logo: generateFallbackBadge('ISAT'), basePrice: 2540, currency: 'IDR', sector: 'Infrastructure / Telco', idxSector: 'INFRASTRUC', marketCap: 'Rp 81.8 T', indices: ['LQ45', 'JII', 'ISSI', 'KOMPAS100', 'IHSG'], specialBoards: ['Day Trade'] },
+  { symbol: 'EXCL', name: 'PT XL Axiata Tbk', category: 'Saham IDX', logo: generateFallbackBadge('EXCL'), basePrice: 2800, currency: 'IDR', sector: 'Infrastructure / Telco', idxSector: 'INFRASTRUC', marketCap: 'Rp 36.7 T', indices: ['LQ45', 'JII', 'ISSI', 'KOMPAS100', 'IHSG'], specialBoards: ['Day Trade'] },
+  { symbol: 'JSMR', name: 'PT Jasa Marga (Persero) Tbk', category: 'Saham IDX', logo: generateFallbackBadge('JSMR'), basePrice: 2730, currency: 'IDR', sector: 'Infrastructure / Toll Roads', idxSector: 'INFRASTRUC', marketCap: 'Rp 19.8 T', indices: ['LQ45', 'SRI-KEHATI', 'JII', 'ISSI', 'KOMPAS100', 'IHSG'], specialBoards: ['Day Trade'] },
+  { symbol: 'TOWR', name: 'PT Sarana Menara Nusantara Tbk', category: 'Saham IDX', logo: generateFallbackBadge('TOWR'), basePrice: 390, currency: 'IDR', sector: 'Infrastructure / Towers', idxSector: 'INFRASTRUC', marketCap: 'Rp 19.9 T', indices: ['LQ45', 'JII', 'ISSI', 'KOMPAS100', 'IHSG'], specialBoards: ['Day Trade'] },
+
+  // 8. NON-CYCLICAL (Konsumen Non-Siklikal & FMCG)
+  { symbol: 'ICBP', name: 'PT Indofood CBP Sukses Makmur Tbk', category: 'Saham IDX', logo: LOGO_ICBP, basePrice: 7600, currency: 'IDR', sector: 'Consumer Non-Cyclicals', idxSector: 'NON-CYCLICAL', marketCap: 'Rp 88.6 T', indices: ['IDX30', 'LQ45', 'SRI-KEHATI', 'JII', 'ISSI', 'KOMPAS100', 'IHSG'], specialBoards: ['Day Trade'] },
+  { symbol: 'INDF', name: 'PT Indofood Sukses Makmur Tbk', category: 'Saham IDX', logo: generateFallbackBadge('INDF'), basePrice: 7425, currency: 'IDR', sector: 'Consumer Non-Cyclicals', idxSector: 'NON-CYCLICAL', marketCap: 'Rp 65.2 T', indices: ['IDX30', 'LQ45', 'SRI-KEHATI', 'JII', 'ISSI', 'KOMPAS100', 'IHSG'], specialBoards: ['Day Trade'] },
+  { symbol: 'UNVR', name: 'PT Unilever Indonesia Tbk', category: 'Saham IDX', logo: LOGO_UNVR, basePrice: 1775, currency: 'IDR', sector: 'Consumer Non-Cyclicals', idxSector: 'NON-CYCLICAL', marketCap: 'Rp 67.7 T', indices: ['IDX30', 'LQ45', 'SRI-KEHATI', 'JII', 'ISSI', 'KOMPAS100', 'IHSG'], specialBoards: ['Day Trade'] },
+  { symbol: 'MYOR', name: 'PT Mayora Indah Tbk', category: 'Saham IDX', logo: generateFallbackBadge('MYOR'), basePrice: 1675, currency: 'IDR', sector: 'Consumer Non-Cyclicals', idxSector: 'NON-CYCLICAL', marketCap: 'Rp 37.5 T', indices: ['LQ45', 'JII', 'ISSI', 'KOMPAS100', 'IHSG'], specialBoards: ['Day Trade'] },
+  { symbol: 'CPIN', name: 'PT Charoen Pokphand Indonesia Tbk', category: 'Saham IDX', logo: generateFallbackBadge('CPIN'), basePrice: 3070, currency: 'IDR', sector: 'Consumer Non-Cyclicals / Poultry', idxSector: 'NON-CYCLICAL', marketCap: 'Rp 50.3 T', indices: ['IDX30', 'LQ45', 'SRI-KEHATI', 'JII', 'ISSI', 'KOMPAS100', 'IHSG'], specialBoards: ['Day Trade'] },
+
+  // 9. PROPERTY (Properti & Real Estat)
+  { symbol: 'BSDE', name: 'PT Bumi Serpong Damai Tbk', category: 'Saham IDX', logo: generateFallbackBadge('BSDE'), basePrice: 595, currency: 'IDR', sector: 'Property & Real Estate', idxSector: 'PROPERTY', marketCap: 'Rp 12.6 T', indices: ['LQ45', 'SRI-KEHATI', 'JII', 'ISSI', 'KOMPAS100', 'IHSG'], specialBoards: ['Day Trade'] },
+  { symbol: 'CTRA', name: 'PT Ciputra Development Tbk', category: 'Saham IDX', logo: generateFallbackBadge('CTRA'), basePrice: 610, currency: 'IDR', sector: 'Property & Real Estate', idxSector: 'PROPERTY', marketCap: 'Rp 11.3 T', indices: ['LQ45', 'SRI-KEHATI', 'JII', 'ISSI', 'KOMPAS100', 'IHSG'], specialBoards: ['Day Trade'] },
+  { symbol: 'PWON', name: 'PT Pakuwon Jati Tbk', category: 'Saham IDX', logo: generateFallbackBadge('PWON'), basePrice: 254, currency: 'IDR', sector: 'Property & Real Estate', idxSector: 'PROPERTY', marketCap: 'Rp 12.2 T', indices: ['ISSI', 'KOMPAS100', 'IHSG'], specialBoards: ['Day Trade'] },
+  { symbol: 'SMRA', name: 'PT Summarecon Agung Tbk', category: 'Saham IDX', logo: generateFallbackBadge('SMRA'), basePrice: 330, currency: 'IDR', sector: 'Property & Real Estate', idxSector: 'PROPERTY', marketCap: 'Rp 5.4 T', indices: ['ISSI', 'KOMPAS100', 'IHSG'], specialBoards: ['Day Trade'] },
+
+  // 10. TRANSPORT (Transportasi & Logistik)
+  { symbol: 'GIAA', name: 'PT Garuda Indonesia (Persero) Tbk', category: 'Saham IDX', logo: generateFallbackBadge('GIAA'), basePrice: 76, currency: 'IDR', sector: 'Transportation / Aviation', idxSector: 'TRANSPORT', marketCap: 'Rp 6.9 T', indices: ['IHSG'], specialBoards: ['FCA', 'Notasi Khusus'] },
+  { symbol: 'ASSA', name: 'PT Adi Sarana Armada Tbk', category: 'Saham IDX', logo: generateFallbackBadge('ASSA'), basePrice: 630, currency: 'IDR', sector: 'Transportation / Logistics', idxSector: 'TRANSPORT', marketCap: 'Rp 2.3 T', indices: ['ISSI', 'KOMPAS100', 'IHSG'], specialBoards: ['Day Trade'] },
+  { symbol: 'BIRD', name: 'PT Blue Bird Tbk', category: 'Saham IDX', logo: generateFallbackBadge('BIRD'), basePrice: 1630, currency: 'IDR', sector: 'Transportation / Taxi', idxSector: 'TRANSPORT', marketCap: 'Rp 4.1 T', indices: ['KOMPAS100', 'IHSG'], specialBoards: ['Day Trade'] },
+  { symbol: 'TMAS', name: 'PT Temas Tbk', category: 'Saham IDX', logo: generateFallbackBadge('TMAS'), basePrice: 127, currency: 'IDR', sector: 'Transportation / Shipping', idxSector: 'TRANSPORT', marketCap: 'Rp 7.2 T', indices: ['ISSI', 'KOMPAS100', 'IHSG'], specialBoards: ['Day Trade'] },
+  { symbol: 'SMDR', name: 'PT Samudera Indonesia Tbk', category: 'Saham IDX', logo: generateFallbackBadge('SMDR'), basePrice: 302, currency: 'IDR', sector: 'Transportation / Shipping', idxSector: 'TRANSPORT', marketCap: 'Rp 4.9 T', indices: ['ISSI', 'KOMPAS100', 'IHSG'], specialBoards: ['Day Trade'] },
+
+  // 11. TECHNOLOGY (Teknologi & Ekosistem Digital)
+  { symbol: 'GOTO', name: 'PT GoTo Gojek Tokopedia Tbk', category: 'Saham IDX', logo: LOGO_GOTO, basePrice: 50, currency: 'IDR', sector: 'Technology & Digital Ecosystem', idxSector: 'TECHNOLOGY', marketCap: 'Rp 60.1 T', indices: ['IDX30', 'LQ45', 'ISSI', 'KOMPAS100', 'IHSG'], specialBoards: ['Day Trade', 'Trading Limit'] },
+  { symbol: 'BUKA', name: 'PT Bukalapak.com Tbk', category: 'Saham IDX', logo: generateFallbackBadge('BUKA'), basePrice: 115, currency: 'IDR', sector: 'Technology / E-Commerce', idxSector: 'TECHNOLOGY', marketCap: 'Rp 11.8 T', indices: ['LQ45', 'ISSI', 'KOMPAS100', 'IHSG'], specialBoards: ['Day Trade'] },
+  { symbol: 'EMTK', name: 'PT Elang Mahkota Teknologi Tbk', category: 'Saham IDX', logo: generateFallbackBadge('EMTK'), basePrice: 505, currency: 'IDR', sector: 'Technology / Media & Digital', idxSector: 'TECHNOLOGY', marketCap: 'Rp 30.9 T', indices: ['ISSI', 'KOMPAS100', 'IHSG'], specialBoards: ['Day Trade'] },
+  { symbol: 'WIRG', name: 'PT WIR ASIA Tbk', category: 'Saham IDX', logo: generateFallbackBadge('WIRG'), basePrice: 64, currency: 'IDR', sector: 'Technology / Augmented Reality', idxSector: 'TECHNOLOGY', marketCap: 'Rp 0.8 T', indices: ['ISSI', 'IHSG'], specialBoards: ['Day Trade', 'UMA'] },
+  { symbol: 'DMMX', name: 'PT Digital Mediatama Maxima Tbk', category: 'Saham IDX', logo: generateFallbackBadge('DMMX'), basePrice: 185, currency: 'IDR', sector: 'Technology / Cloud & Ads', idxSector: 'TECHNOLOGY', marketCap: 'Rp 1.4 T', indices: ['ISSI', 'IHSG'], specialBoards: ['Day Trade'] },
+  { symbol: 'LABA', name: 'Green Power Group Tbk', category: 'Saham IDX', logo: LOGO_LABA, basePrice: 93, currency: 'IDR', sector: 'Renewable Tech', idxSector: 'TECHNOLOGY', marketCap: 'Rp 0.7 T', indices: ['IHSG'], specialBoards: ['Suspended', 'UMA'] },
+
+  // ==========================================
   // CRYPTO TOKENS
-  { symbol: 'BTCUSDT', name: 'Bitcoin', category: 'Crypto', logo: LOGO_BTC, basePrice: 63138.78, currency: 'USD' },
-  { symbol: 'ETHUSDT', name: 'Ethereum', category: 'Crypto', logo: LOGO_ETH, basePrice: 3420.10, currency: 'USD' },
-  { symbol: 'BNBUSDT', name: 'BNB', category: 'Crypto', logo: LOGO_BNB, basePrice: 580.40, currency: 'USD' },
-  { symbol: 'SOLUSDT', name: 'Solana', category: 'Crypto', logo: LOGO_SOL, basePrice: 145.20, currency: 'USD' },
-  { symbol: 'XRPUSDT', name: 'XRP', category: 'Crypto', logo: LOGO_XRP, basePrice: 0.58, currency: 'USD' },
-  { symbol: 'ADAUSDT', name: 'Cardano', category: 'Crypto', logo: LOGO_ADA, basePrice: 0.38, currency: 'USD' },
-  { symbol: 'DOGEUSDT', name: 'Dogecoin', category: 'Crypto', logo: LOGO_DOGE, basePrice: 0.1245, currency: 'USD' },
-  { symbol: 'AVAXUSDT', name: 'Avalanche', category: 'Crypto', logo: LOGO_AVAX, basePrice: 24.20, currency: 'USD' },
-  { symbol: 'MATICUSDT', name: 'Polygon (POL)', category: 'Crypto', logo: LOGO_MATIC, basePrice: 0.42, currency: 'USD' },
-  { symbol: 'LINKUSDT', name: 'Chainlink', category: 'Crypto', logo: LOGO_LINK, basePrice: 14.20, currency: 'USD' },
-  { symbol: 'DOTUSDT', name: 'Polkadot', category: 'Crypto', logo: LOGO_DOT, basePrice: 4.80, currency: 'USD' },
-  { symbol: 'NEARUSDT', name: 'NEAR Protocol', category: 'Crypto', logo: LOGO_NEAR, basePrice: 4.95, currency: 'USD' },
-  { symbol: 'SUIUSDT', name: 'Sui Network', category: 'Crypto', logo: LOGO_SUI, basePrice: 1.85, currency: 'USD' },
-  { symbol: 'PEPEUSDT', name: 'Pepe Coin', category: 'Crypto', logo: LOGO_PEPE, basePrice: 0.0000095, currency: 'USD' },
-  { symbol: 'SHIBUSDT', name: 'Shiba Inu', category: 'Crypto', logo: LOGO_SHIB, basePrice: 0.000018, currency: 'USD' },
-  { symbol: 'TONUSDT', name: 'Toncoin', category: 'Crypto', logo: LOGO_TON, basePrice: 5.60, currency: 'USD' },
-  { symbol: 'LTCUSDT', name: 'Litecoin', category: 'Crypto', logo: LOGO_LTC, basePrice: 68.40, currency: 'USD' },
-  { symbol: 'UNIUSDT', name: 'Uniswap', category: 'Crypto', logo: LOGO_UNI, basePrice: 7.40, currency: 'USD' },
+  // ==========================================
+  { symbol: 'BTCUSDT', name: 'Bitcoin', category: 'Crypto', logo: LOGO_BTC, basePrice: 64083.00, currency: 'USD' },
+  { symbol: 'ETHUSDT', name: 'Ethereum', category: 'Crypto', logo: LOGO_ETH, basePrice: 1909.60, currency: 'USD' },
+  { symbol: 'BNBUSDT', name: 'BNB', category: 'Crypto', logo: LOGO_BNB, basePrice: 606.48, currency: 'USD' },
+  { symbol: 'SOLUSDT', name: 'Solana', category: 'Crypto', logo: LOGO_SOL, basePrice: 76.05, currency: 'USD' },
+  { symbol: 'XRPUSDT', name: 'XRP', category: 'Crypto', logo: LOGO_XRP, basePrice: 1.005, currency: 'USD' },
+  { symbol: 'ADAUSDT', name: 'Cardano', category: 'Crypto', logo: LOGO_ADA, basePrice: 0.1749, currency: 'USD' },
+  { symbol: 'DOGEUSDT', name: 'Dogecoin', category: 'Crypto', logo: LOGO_DOGE, basePrice: 0.0705, currency: 'USD' },
+  { symbol: 'AVAXUSDT', name: 'Avalanche', category: 'Crypto', logo: LOGO_AVAX, basePrice: 6.32, currency: 'USD' },
+  { symbol: 'MATICUSDT', name: 'Polygon (POL)', category: 'Crypto', logo: LOGO_MATIC, basePrice: 0.379, currency: 'USD' },
+  { symbol: 'LINKUSDT', name: 'Chainlink', category: 'Crypto', logo: LOGO_LINK, basePrice: 9.52, currency: 'USD' },
+  { symbol: 'DOTUSDT', name: 'Polkadot', category: 'Crypto', logo: LOGO_DOT, basePrice: 0.757, currency: 'USD' },
+  { symbol: 'NEARUSDT', name: 'NEAR Protocol', category: 'Crypto', logo: LOGO_NEAR, basePrice: 1.639, currency: 'USD' },
+  { symbol: 'SUIUSDT', name: 'Sui Network', category: 'Crypto', logo: LOGO_SUI, basePrice: 0.678, currency: 'USD' },
+  { symbol: 'PEPEUSDT', name: 'Pepe Coin', category: 'Crypto', logo: LOGO_PEPE, basePrice: 0.00000259, currency: 'USD' },
+  { symbol: 'SHIBUSDT', name: 'Shiba Inu', category: 'Crypto', logo: LOGO_SHIB, basePrice: 0.00000447, currency: 'USD' },
+  { symbol: 'TONUSDT', name: 'Toncoin', category: 'Crypto', logo: LOGO_TON, basePrice: 1.60, currency: 'USD' },
+  { symbol: 'LTCUSDT', name: 'Litecoin', category: 'Crypto', logo: LOGO_LTC, basePrice: 44.39, currency: 'USD' },
+  { symbol: 'UNIUSDT', name: 'Uniswap', category: 'Crypto', logo: LOGO_UNI, basePrice: 3.29, currency: 'USD' },
 
+  // ==========================================
   // SAHAM GLOBAL (US TECH & BLUE CHIP)
-  { symbol: 'NVDA', name: 'NVIDIA Corporation', category: 'Saham Global', logo: LOGO_NVDA, basePrice: 225.16, currency: 'USD' },
-  { symbol: 'AAPL', name: 'Apple Inc.', category: 'Saham Global', logo: LOGO_AAPL, basePrice: 305.93, currency: 'USD' },
-  { symbol: 'TSLA', name: 'Tesla, Inc.', category: 'Saham Global', logo: LOGO_TSLA, basePrice: 342.27, currency: 'USD' },
-  { symbol: 'MSFT', name: 'Microsoft Corporation', category: 'Saham Global', logo: LOGO_MSFT, basePrice: 495.40, currency: 'USD' },
-  { symbol: 'AMZN', name: 'Amazon.com, Inc.', category: 'Saham Global', logo: LOGO_AMZN, basePrice: 262.65, currency: 'USD' },
-  { symbol: 'GOOGL', name: 'Alphabet Inc. (Google)', category: 'Saham Global', logo: LOGO_GOOGL, basePrice: 345.90, currency: 'USD' },
-  { symbol: 'META', name: 'Meta Platforms Inc.', category: 'Saham Global', logo: LOGO_META, basePrice: 589.85, currency: 'USD' },
-  { symbol: 'NFLX', name: 'Netflix Inc.', category: 'Saham Global', logo: LOGO_NFLX, basePrice: 78.16, currency: 'USD' },
-  { symbol: 'AMD', name: 'Advanced Micro Devices', category: 'Saham Global', logo: LOGO_AMD, basePrice: 514.39, currency: 'USD' },
-  { symbol: 'INTC', name: 'Intel Corporation', category: 'Saham Global', logo: LOGO_INTC, basePrice: 102.50, currency: 'USD' },
-  { symbol: 'COIN', name: 'Coinbase Global, Inc.', category: 'Saham Global', logo: LOGO_COIN, basePrice: 148.47, currency: 'USD' },
+  // ==========================================
+  { symbol: 'NVDA', name: 'NVIDIA Corporation', category: 'Saham Global', logo: LOGO_NVDA, basePrice: 227.40, currency: 'USD' },
+  { symbol: 'AAPL', name: 'Apple Inc.', category: 'Saham Global', logo: LOGO_AAPL, basePrice: 303.34, currency: 'USD' },
+  { symbol: 'TSLA', name: 'Tesla, Inc.', category: 'Saham Global', logo: LOGO_TSLA, basePrice: 340.46, currency: 'USD' },
+  { symbol: 'MSFT', name: 'Microsoft Corporation', category: 'Saham Global', logo: LOGO_MSFT, basePrice: 484.87, currency: 'USD' },
+  { symbol: 'AMZN', name: 'Amazon.com, Inc.', category: 'Saham Global', logo: LOGO_AMZN, basePrice: 261.17, currency: 'USD' },
+  { symbol: 'GOOGL', name: 'Alphabet Inc. (Google)', category: 'Saham Global', logo: LOGO_GOOGL, basePrice: 343.95, currency: 'USD' },
+  { symbol: 'META', name: 'Meta Platforms Inc.', category: 'Saham Global', logo: LOGO_META, basePrice: 574.16, currency: 'USD' },
+  { symbol: 'NFLX', name: 'Netflix Inc.', category: 'Saham Global', logo: LOGO_NFLX, basePrice: 76.55, currency: 'USD' },
+  { symbol: 'AMD', name: 'Advanced Micro Devices', category: 'Saham Global', logo: LOGO_AMD, basePrice: 513.38, currency: 'USD' },
+  { symbol: 'INTC', name: 'Intel Corporation', category: 'Saham Global', logo: LOGO_INTC, basePrice: 104.76, currency: 'USD' },
+  { symbol: 'COIN', name: 'Coinbase Global, Inc.', category: 'Saham Global', logo: LOGO_COIN, basePrice: 150.85, currency: 'USD' },
 
+  // ==========================================
   // KOMODITAS & FOREX
-  { symbol: 'GOLD', name: 'Gold / Emas Global (XAU/USD)', category: 'Komoditas & Forex', logo: LOGO_GOLD, basePrice: 4437.30, currency: 'USD' },
-  { symbol: 'SILVER', name: 'Silver / Perak Global (XAG/USD)', category: 'Komoditas & Forex', logo: LOGO_SILVER, basePrice: 31.40, currency: 'USD' },
-  { symbol: 'SPX', name: 'S&P 500 Index', category: 'Komoditas & Forex', logo: LOGO_SPX, basePrice: 5950.00, currency: 'USD' },
-  { symbol: 'NDX', name: 'NASDAQ 100 Index', category: 'Komoditas & Forex', logo: LOGO_NDX, basePrice: 20500.00, currency: 'USD' },
-  { symbol: 'EURUSD', name: 'EUR / USD Forex', category: 'Komoditas & Forex', logo: LOGO_EURUSD, basePrice: 1.0850, currency: 'USD' },
+  // ==========================================
+  { symbol: 'GOLD', name: 'Gold / Emas Global (XAU/USD)', category: 'Komoditas & Forex', logo: LOGO_GOLD, basePrice: 4479.90, currency: 'USD' },
+  { symbol: 'SILVER', name: 'Silver / Perak Global (XAG/USD)', category: 'Komoditas & Forex', logo: LOGO_SILVER, basePrice: 66.56, currency: 'USD' },
+  { symbol: 'SPX', name: 'S&P 500 Index', category: 'Komoditas & Forex', logo: LOGO_SPX, basePrice: 7772.27, currency: 'USD' },
+  { symbol: 'NDX', name: 'NASDAQ 100 Index', category: 'Komoditas & Forex', logo: LOGO_NDX, basePrice: 30138.92, currency: 'USD' },
+  { symbol: 'EURUSD', name: 'EUR / USD Forex', category: 'Komoditas & Forex', logo: LOGO_EURUSD, basePrice: 1.1585, currency: 'USD' },
 ];
 
 const LOGO_MAP: Record<string, string> = {
@@ -642,6 +763,8 @@ const LOGO_MAP: Record<string, string> = {
   'PTBA': LOGO_PTBA,
   'UNVR': LOGO_UNVR,
   'KLBF': LOGO_KLBF,
+  'TPIA': LOGO_TPIA,
+  'SMGR': LOGO_SMGR,
   'LABA': LOGO_LABA,
 
   // CRYPTO
@@ -766,20 +889,22 @@ function generateFallbackBadge(symbol: string): string {
 }
 
 export function getAssetLogo(symbol: string): string {
-  if (!symbol) return LOGO_BBCA;
+  if (!symbol) return 'https://assets.stockbit.com/logos/companies/BBCA.png';
   const clean = symbol.toUpperCase().trim();
   const withoutUSDT = clean.replace('USDT', '');
   
-  if (LOGO_MAP[clean]) return LOGO_MAP[clean];
-  if (LOGO_MAP[withoutUSDT]) return LOGO_MAP[withoutUSDT];
+  // Use SVG for US Stocks, Commodities, and Forex which might not be on Stockbit
+  const usStocksAndCommodities = [
+    'NVDA', 'AAPL', 'TSLA', 'MSFT', 'AMZN', 'GOOGL', 'GOOG', 'META', 
+    'NFLX', 'AMD', 'INTC', 'COIN', 'GOLD', 'XAU', 'XAUUSD', 'SILVER', 
+    'XAG', 'XAGUSD', 'SPX', 'NDX', 'EURUSD'
+  ];
+  if (usStocksAndCommodities.includes(clean) && LOGO_MAP[clean]) {
+      return LOGO_MAP[clean];
+  }
 
-  const found = ALL_GLOBAL_ASSETS.find(
-    a => a.symbol.toUpperCase() === clean || 
-         a.symbol.toUpperCase().replace('USDT', '') === withoutUSDT
-  );
-  if (found && found.logo) return found.logo;
-
-  return generateFallbackBadge(clean);
+  // Use official Stockbit CDN for IDX stocks and Crypto
+  return `https://assets.stockbit.com/logos/companies/${withoutUSDT}.png`;
 }
 
 export function getAssetBrandColor(symbol: string): string {

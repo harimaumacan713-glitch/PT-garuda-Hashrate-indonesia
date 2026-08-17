@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useNotification, PushNotificationItem } from '../contexts/NotificationContext';
-import { Landmark, ArrowUpRight, ArrowDownLeft, X, BellRing, CheckCircle2 } from 'lucide-react';
+import { Landmark, ArrowUpRight, ArrowDownLeft, X, BellRing, CheckCircle2, Check } from 'lucide-react';
 
 export function PhonePushNotification() {
   const { activePush, dismissPush } = useNotification();
@@ -78,8 +78,8 @@ export function PhonePushNotification() {
               )}
               
               {/* Mini Stockbit Green Dot */}
-              <span className="absolute -bottom-1 -right-1 w-4 h-4 bg-[#00B26A] text-white rounded-full flex items-center justify-center text-[8px] font-bold border-2 border-white dark:border-gray-900 shadow-xs">
-                ✓
+              <span className="absolute -bottom-1 -right-1 w-4 h-4 bg-[#00B26A] text-white rounded-full flex items-center justify-center border-2 border-white dark:border-gray-900 shadow-xs">
+                <Check className="w-2.5 h-2.5 stroke-[3]" />
               </span>
             </div>
 

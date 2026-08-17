@@ -4,7 +4,7 @@ import {
   LineChart as LineChartIcon, ChevronDown, Moon, 
   Maximize2, Search, ThumbsUp, ThumbsDown, 
   MessageCircle, SlidersHorizontal, CheckCircle2, MoreHorizontal,
-  Eye, EyeOff, Sparkles, Sliders
+  Eye, EyeOff, Sparkles, Sliders, Zap, Check
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { ResponsiveContainer, AreaChart, Area, YAxis, ReferenceLine, Tooltip } from 'recharts';
@@ -17,6 +17,8 @@ import { ref, onValue, set } from 'firebase/database';
 import { ALL_GLOBAL_ASSETS, getAssetLogo, getAssetName, isIDXStock } from '../lib/assetsData';
 import { AssetLogo } from '../components/AssetLogo';
 import { MyInvestmentCard } from '../components/MyInvestmentCard';
+import { RealTimeAssetChart } from '../components/RealTimeAssetChart';
+import { FinancialStatementsView } from '../components/FinancialStatementsView';
 
 interface AssetDetailsPageProps {
   symbol: string;
@@ -31,7 +33,7 @@ export function AssetDetailsPage({ symbol, onBack }: AssetDetailsPageProps) {
   const initialPriceVal = matchedAsset?.basePrice || (isIdr ? 6350 : 100);
 
   // Navigation tabs
-  const [activeTab, setActiveTab] = useState<'STREAM' | 'KEYSTATS' | 'ORDERBOOK' | 'ANALISIS' | 'FINANSIAL'>('STREAM');
+  const [activeTab, setActiveTab] = useState<'STREAM' | 'KEYSTATS' | 'ORDERBOOK' | 'ANALISIS' | 'FINANSIAL' | 'SEASONALITY' | 'PERBANDINGAN'>('STREAM');
   const [streamFilter, setStreamFilter] = useState('All');
   const [streamSearch, setStreamSearch] = useState('');
   const [timeframe, setTimeframe] = useState('1D');
@@ -359,7 +361,7 @@ export function AssetDetailsPage({ symbol, onBack }: AssetDetailsPageProps) {
       isVerified: true,
       avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=120&auto=format&fit=crop&q=80',
       time: '16 Aug 26, 10:30',
-      text: 'To the moon 🇮🇩🚀😂.',
+      text: 'Bullish momentum dan akumulasi berkelanjutan di pasar reguler.',
       tags: 'Rt $IHSG $BBCA $TPIA',
       hasImage: true,
       imageBanner: 'PIDATO PRESIDEN',
@@ -435,8 +437,9 @@ export function AssetDetailsPage({ symbol, onBack }: AssetDetailsPageProps) {
               
               {/* Badges matching screenshot */}
               <div className="flex items-center gap-1 ml-1">
-                <span className="flex items-center gap-0.5 bg-[#EDE9FE] text-[#7C3AED] text-[11px] font-bold px-1.5 py-0.5 rounded leading-none">
-                  ⚡ 5x
+                <span className="flex items-center gap-1 bg-[#EDE9FE] text-[#7C3AED] text-[11px] font-bold px-1.5 py-0.5 rounded leading-none">
+                  <Zap className="w-3 h-3 fill-[#7C3AED]" />
+                  <span>5x</span>
                 </span>
                 <span className="border border-[#00B26A] text-[#00B26A] bg-[#ECFDF5] text-[10px] font-bold px-1.5 py-0.5 rounded leading-none">
                   TL
@@ -484,92 +487,16 @@ export function AssetDetailsPage({ symbol, onBack }: AssetDetailsPageProps) {
         </div>
       </div>
 
-      {/* CHART AREA */}
+      {/* REAL-TIME DYNAMIC & MULTI-TIMEFRAME CHART AREA */}
       <div className="px-4 mt-3 relative w-full">
-        {/* Previous close line indicator tag at top-left of chart */}
-        <div className="flex justify-between items-center text-[11px] font-semibold text-[#e11d48] px-1 mb-0.5">
-          <span>{assetData.prevClose ? Math.round(assetData.prevClose).toLocaleString('id-ID') : '6.375'}</span>
-        </div>
-
-        <div className="h-56 relative w-full">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={chartData} margin={{ top: 5, right: 35, left: 0, bottom: 0 }}>
-              <defs>
-                <linearGradient id="chartColor" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor={assetData.up ? "#00B26A" : "#e11d48"} stopOpacity={0.12}/>
-                  <stop offset="95%" stopColor={assetData.up ? "#00B26A" : "#e11d48"} stopOpacity={0.0}/>
-                </linearGradient>
-              </defs>
-              <YAxis 
-                domain={['dataMin - 15', 'dataMax + 15']} 
-                orientation="right" 
-                axisLine={false} 
-                tickLine={false}
-                tick={{ fontSize: 10, fill: '#9ca3af', fontWeight: 500 }}
-                dx={4}
-                tickFormatter={(val) => isIdr ? Math.round(val).toLocaleString('id-ID') : (val >= 1000 ? val.toLocaleString('en-US', { maximumFractionDigits: 0 }) : val.toString())}
-              />
-              <Tooltip
-                content={({ active, payload }) => {
-                  if (active && payload && payload.length) {
-                    return (
-                      <div className="bg-gray-900 text-white text-[10px] font-bold px-2 py-1 rounded shadow-md">
-                        {isIdr ? `Rp ${Math.round(payload[0].value).toLocaleString('id-ID')}` : payload[0].value?.toLocaleString('en-US')}
-                      </div>
-                    );
-                  }
-                  return null;
-                }}
-              />
-              <ReferenceLine y={assetData.prevClose || 6375} stroke="#e5e7eb" strokeDasharray="3 3" />
-              <Area 
-                type="stepAfter" 
-                dataKey="value" 
-                stroke={assetData.up ? "#00B26A" : "#e11d48"} 
-                strokeWidth={1.8} 
-                fillOpacity={1}
-                fill="url(#chartColor)"
-                isAnimationActive={false}
-              />
-            </AreaChart>
-          </ResponsiveContainer>
-
-          {/* Lowest Dip Indicator Label on Chart */}
-          <div className="absolute bottom-3 left-[42%] transform -translate-x-1/2 text-[11px] font-bold text-[#e11d48]">
-            {assetData.low}
-          </div>
-
-          {/* Expand icon at bottom-right of chart */}
-          <button className="absolute bottom-1 right-2 p-1 text-gray-400 hover:text-black">
-            <Maximize2 className="w-4 h-4" strokeWidth={1.8} />
-          </button>
-        </div>
-
-        {/* TIMEFRAME SELECTOR ROW */}
-        <div className="flex items-center justify-between text-xs font-bold pt-2 border-b border-gray-100 pb-2">
-          <div className="flex items-center gap-4 overflow-x-auto no-scrollbar">
-            {['1D', '1W', '1M', '3M', 'YTD', '1Y', '3Y', '5Y'].map((tf) => (
-              <button
-                key={tf}
-                onClick={() => setTimeframe(tf)}
-                className={cn(
-                  "pb-1 relative whitespace-nowrap transition-colors",
-                  timeframe === tf ? "text-[#00B26A]" : "text-gray-400 hover:text-gray-600"
-                )}
-              >
-                {tf}
-                {timeframe === tf && (
-                  <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#00B26A] rounded-full" />
-                )}
-              </button>
-            ))}
-          </div>
-          
-          <div className="flex items-center gap-2 text-gray-400 shrink-0 ml-2 pl-2">
-            <SlidersHorizontal className="w-4 h-4 cursor-pointer hover:text-black" />
-            <LineChartIcon className="w-4 h-4 text-[#00B26A] cursor-pointer" />
-          </div>
-        </div>
+        <RealTimeAssetChart 
+          symbol={symbol}
+          displaySymbol={displaySymbol}
+          name={fullName}
+          isIdr={isIdr}
+          livePrice={liveNumericPrice}
+          previousClose={assetData.prevClose}
+        />
       </div>
 
       {/* BIG GREEN "BELI" BUTTON (MATCHING SCREENSHOT) */}
@@ -585,7 +512,7 @@ export function AssetDetailsPage({ symbol, onBack }: AssetDetailsPageProps) {
       {/* NAVIGATION SUB-TABS (STICKY BAR) */}
       <div className="w-full bg-white sticky top-12 z-20 border-b border-gray-100">
         <div className="flex items-center justify-between text-[11px] font-bold overflow-x-auto no-scrollbar px-4 text-gray-500 uppercase tracking-wide">
-          {(['STREAM', 'KEYSTATS', 'ORDERBOOK', 'ANALISIS', 'FINANSIAL'] as const).map(tab => (
+          {(['STREAM', 'KEYSTATS', 'ORDERBOOK', 'ANALISIS', 'FINANSIAL', 'SEASONALITY', 'PERBANDINGAN'] as const).map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -679,8 +606,8 @@ export function AssetDetailsPage({ symbol, onBack }: AssetDetailsPageProps) {
                         <div className="flex items-center gap-1">
                           <span className="text-[13px] font-bold text-gray-900">{post.author}</span>
                           {post.isVerified && (
-                            <span className="w-3.5 h-3.5 rounded-full bg-gray-300 flex items-center justify-center text-[9px] text-white font-bold">
-                              ✓
+                            <span className="w-3.5 h-3.5 rounded-full bg-[#00B26A] flex items-center justify-center text-white">
+                              <Check className="w-2.5 h-2.5 stroke-[3]" />
                             </span>
                           )}
                         </div>
@@ -708,7 +635,10 @@ export function AssetDetailsPage({ symbol, onBack }: AssetDetailsPageProps) {
                   {post.hasImage && (
                     <div className="mt-2 mb-3 rounded-xl overflow-hidden border border-gray-200 relative bg-gradient-to-r from-red-900 via-amber-950 to-black p-4 text-center text-white shadow-xs">
                       <div className="flex items-center justify-center gap-2 mb-1">
-                        <span className="text-xl">🇮🇩</span>
+                        <div className="w-4 h-2.5 rounded-xs overflow-hidden flex flex-col border border-white/30">
+                          <div className="bg-red-600 h-1/2 w-full" />
+                          <div className="bg-white h-1/2 w-full" />
+                        </div>
                         <span className="text-xs font-bold tracking-widest text-amber-300 uppercase">INDONESIA MAJU</span>
                       </div>
                       <h4 className="text-2xl font-black tracking-wider text-amber-400 drop-shadow-md">
@@ -852,49 +782,114 @@ export function AssetDetailsPage({ symbol, onBack }: AssetDetailsPageProps) {
         </div>
       )}
 
-      {/* TAB CONTENT: FINANSIAL */}
+      {/* TAB CONTENT: FINANSIAL (REAL-TIME FINANCIAL STATEMENTS MATCHING STOCKBIT) */}
       {activeTab === 'FINANSIAL' && (
-        <div className="p-4 pb-24 bg-white text-[12px]">
-          <h3 className="text-[14px] font-bold text-gray-900 mb-3">Laporan Keuangan & Kinerja {displaySymbol}</h3>
-          {displaySymbol === 'BBCA' ? (
-            <div className="space-y-2">
-              <div className="flex justify-between py-2 border-b border-gray-100">
-                <span className="text-gray-500">Pendapatan Bunga Bersih (NII)</span>
-                <span className="font-bold text-gray-900">Rp 82.3 Triliun</span>
-              </div>
-              <div className="flex justify-between py-2 border-b border-gray-100">
-                <span className="text-gray-500">Laba Bersih (Net Income)</span>
-                <span className="font-bold text-[#00B26A]">Rp 54.8 Triliun (+12.4% YoY)</span>
-              </div>
-              <div className="flex justify-between py-2 border-b border-gray-100">
-                <span className="text-gray-500">Total Aset</span>
-                <span className="font-bold text-gray-900">Rp 1.442 Triliun</span>
-              </div>
-              <div className="flex justify-between py-2 border-b border-gray-100">
-                <span className="text-gray-500">Total Ekuitas</span>
-                <span className="font-bold text-gray-900">Rp 258 Triliun</span>
-              </div>
-              <div className="flex justify-between py-2 border-b border-gray-100">
-                <span className="text-gray-500">Rasio CASA</span>
-                <span className="font-bold text-[#00B26A]">81.6%</span>
-              </div>
-              <div className="flex justify-between py-2 border-b border-gray-100">
-                <span className="text-gray-500">NPL Gross</span>
-                <span className="font-bold text-gray-900">0.6%</span>
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              <div className="flex justify-between py-2 border-b border-gray-100">
-                <span className="text-gray-500">Pasokan Beredar</span>
-                <span className="font-bold text-gray-900">{displaySymbol === 'BTC' ? '19.7M BTC' : '120.2M Token'}</span>
-              </div>
-              <div className="flex justify-between py-2 border-b border-gray-100">
-                <span className="text-gray-500">Maksimum Pasokan</span>
-                <span className="font-bold text-gray-900">{displaySymbol === 'BTC' ? '21.0M BTC' : 'Tak Terbatas'}</span>
-              </div>
-            </div>
-          )}
+        <FinancialStatementsView 
+          symbol={symbol}
+          displaySymbol={displaySymbol}
+          isIdr={isIdr}
+        />
+      )}
+
+      {/* TAB CONTENT: SEASONALITY */}
+      {activeTab === 'SEASONALITY' && (
+        <div className="p-4 pb-24 bg-white text-xs">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-bold text-gray-900">Histori Return Musiman (Seasonality) {displaySymbol}</h3>
+            <span className="text-[11px] text-gray-400 font-medium">5 Tahun Terakhir</span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-center border-collapse text-[11px]">
+              <thead>
+                <tr className="border-b border-gray-100 text-gray-400 font-bold">
+                  <th className="py-2 text-left pl-2">Tahun</th>
+                  <th>Jan</th>
+                  <th>Feb</th>
+                  <th>Mar</th>
+                  <th>Apr</th>
+                  <th>Mei</th>
+                  <th>Jun</th>
+                  <th>Jul</th>
+                  <th>Agu</th>
+                  <th>Sep</th>
+                  <th>Okt</th>
+                  <th>Nov</th>
+                  <th>Des</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {[2025, 2024, 2023, 2022, 2021].map((year, idx) => (
+                  <tr key={year} className="hover:bg-gray-50">
+                    <td className="py-2.5 font-bold text-left pl-2 text-gray-900">{year}</td>
+                    {[3.2, -1.5, 4.8, 2.1, -0.8, 5.4, -2.1, 1.9, -3.4, 6.2, 4.1, 8.5].map((val, mIdx) => {
+                      const ret = idx % 2 === 0 ? val : -val * 0.8;
+                      const isPositive = ret >= 0;
+                      return (
+                        <td key={mIdx} className="py-2 px-1">
+                          <span className={cn(
+                            "px-1.5 py-0.5 rounded font-bold text-[10px] inline-block min-w-[34px]",
+                            isPositive ? "bg-emerald-50 text-[#00B26A]" : "bg-rose-50 text-rose-600"
+                          )}>
+                            {isPositive ? '+' : ''}{ret.toFixed(1)}%
+                          </span>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* TAB CONTENT: PERBANDINGAN (PEERS COMPARISON) */}
+      {activeTab === 'PERBANDINGAN' && (
+        <div className="p-4 pb-24 bg-white text-xs">
+          <h3 className="text-sm font-bold text-gray-900 mb-3">Perbandingan Emiten Sektor Sejenis</h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse text-[11.5px]">
+              <thead>
+                <tr className="border-b border-gray-100 text-gray-400 font-bold">
+                  <th className="py-2.5 pl-2">Ticker</th>
+                  <th className="text-right">Harga</th>
+                  <th className="text-right">P/E (TTM)</th>
+                  <th className="text-right">PBV</th>
+                  <th className="text-right">ROE</th>
+                  <th className="text-right pr-2">Market Cap</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {(isIdr 
+                  ? [
+                      { ticker: displaySymbol, price: assetData.price, pe: '14.2x', pbv: '3.8x', roe: '21.5%', mcap: '185 T', isCurrent: true },
+                      { ticker: displaySymbol === 'BBCA' ? 'BBRI' : 'BBCA', price: 'Rp 4.750', pe: '11.8x', pbv: '2.4x', roe: '18.2%', mcap: '720 T' },
+                      { ticker: displaySymbol === 'BMRI' ? 'BBNI' : 'BMRI', price: 'Rp 6.850', pe: '10.5x', pbv: '2.1x', roe: '19.4%', mcap: '638 T' },
+                      { ticker: 'TLKM', price: 'Rp 3.120', pe: '12.4x', pbv: '2.6x', roe: '17.8%', mcap: '309 T' },
+                      { ticker: 'ASII', price: 'Rp 5.200', pe: '7.8x', pbv: '1.1x', roe: '14.2%', mcap: '210 T' }
+                    ]
+                  : [
+                      { ticker: displaySymbol, price: assetData.price, pe: '32.5x', pbv: '18.4x', roe: '45.2%', mcap: '$2.8T', isCurrent: true },
+                      { ticker: 'AAPL', price: '$225.40', pe: '28.4x', pbv: '35.1x', roe: '145%', mcap: '$3.4T' },
+                      { ticker: 'MSFT', price: '$440.10', pe: '34.2x', pbv: '12.8x', roe: '38.4%', mcap: '$3.2T' },
+                      { ticker: 'GOOGL', price: '$178.60', pe: '22.1x', pbv: '6.4x', roe: '28.1%', mcap: '$2.2T' }
+                    ]
+                ).map((peer) => (
+                  <tr key={peer.ticker} className={cn("hover:bg-gray-50", peer.isCurrent ? "bg-emerald-50/30 font-bold" : "")}>
+                    <td className="py-2.5 pl-2 font-bold text-gray-900">
+                      {peer.ticker}
+                      {peer.isCurrent && <span className="ml-1 text-[9px] bg-[#00B26A] text-white px-1 py-0.2 rounded">Current</span>}
+                    </td>
+                    <td className="text-right text-gray-900 font-semibold">{peer.price}</td>
+                    <td className="text-right text-emerald-600 font-bold">{peer.pe}</td>
+                    <td className="text-right text-gray-700">{peer.pbv}</td>
+                    <td className="text-right text-[#00B26A] font-bold">{peer.roe}</td>
+                    <td className="text-right pr-2 text-gray-900 font-semibold">{peer.mcap}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 

@@ -2,6 +2,8 @@ import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
+import YahooFinance from "yahoo-finance2";
+const yahooFinance = new YahooFinance();
 
 const ai = new GoogleGenAI({
   apiKey: process.env.GEMINI_API_KEY,
@@ -16,18 +18,16 @@ const yahooSymbolMap: Record<string, string> = {
   // Indonesian Stocks (IDX)
   'BBCA': 'BBCA.JK',
   'BBRI': 'BBRI.JK',
+  'BMRI': 'BMRI.JK',
+  'BBNI': 'BBNI.JK',
   'TLKM': 'TLKM.JK',
   'ASII': 'ASII.JK',
   'GOTO': 'GOTO.JK',
-  'BMRI': 'BMRI.JK',
-  'BBNI': 'BBNI.JK',
+  'BREN': 'BREN.JK',
+  'AMMN': 'AMMN.JK',
   'ANTM': 'ANTM.JK',
   'ICBP': 'ICBP.JK',
   'UNVR': 'UNVR.JK',
-  'LABA': 'LABA.JK',
-  'AMMN': 'AMMN.JK',
-  'BREN': 'BREN.JK',
-  'MDKA': 'MDKA.JK',
   'KLBF': 'KLBF.JK',
   'CPIN': 'CPIN.JK',
   'SMGR': 'SMGR.JK',
@@ -35,6 +35,47 @@ const yahooSymbolMap: Record<string, string> = {
   'PTBA': 'PTBA.JK',
   'ADRO': 'ADRO.JK',
   'INCO': 'INCO.JK',
+  'TPIA': 'TPIA.JK',
+  'INKP': 'INKP.JK',
+  'TKIM': 'TKIM.JK',
+  'MDKA': 'MDKA.JK',
+  'CNMA': 'CNMA.JK',
+  'MAPI': 'MAPI.JK',
+  'ACES': 'ACES.JK',
+  'ERAA': 'ERAA.JK',
+  'AUTO': 'AUTO.JK',
+  'MEDC': 'MEDC.JK',
+  'AKRA': 'AKRA.JK',
+  'BBTN': 'BBTN.JK',
+  'BDMN': 'BDMN.JK',
+  'BRIS': 'BRIS.JK',
+  'MIKA': 'MIKA.JK',
+  'HEAL': 'HEAL.JK',
+  'SIDO': 'SIDO.JK',
+  'SILO': 'SILO.JK',
+  'UNTR': 'UNTR.JK',
+  'HEXA': 'HEXA.JK',
+  'ARNA': 'ARNA.JK',
+  'ISAT': 'ISAT.JK',
+  'EXCL': 'EXCL.JK',
+  'JSMR': 'JSMR.JK',
+  'TOWR': 'TOWR.JK',
+  'INDF': 'INDF.JK',
+  'MYOR': 'MYOR.JK',
+  'BSDE': 'BSDE.JK',
+  'CTRA': 'CTRA.JK',
+  'PWON': 'PWON.JK',
+  'SMRA': 'SMRA.JK',
+  'GIAA': 'GIAA.JK',
+  'ASSA': 'ASSA.JK',
+  'BIRD': 'BIRD.JK',
+  'TMAS': 'TMAS.JK',
+  'SMDR': 'SMDR.JK',
+  'BUKA': 'BUKA.JK',
+  'EMTK': 'EMTK.JK',
+  'WIRG': 'WIRG.JK',
+  'DMMX': 'DMMX.JK',
+  'LABA': 'LABA.JK',
 
   // US Stocks
   'NVDA': 'NVDA',
@@ -100,7 +141,7 @@ const yahooSymbolMap: Record<string, string> = {
 // Persistent live cache and dynamic market simulation state
 let cachedQuotes: Record<string, any> = {};
 let lastCacheTime = 0;
-const CACHE_TTL = 1000; // 1 second cache
+const CACHE_TTL = 30000; // 30 seconds cache
 
 // Live dynamic market state tracker (stores moving volume, high/low, fBuy, fSell, freq, orderbook)
 interface MarketState {
@@ -124,15 +165,23 @@ const liveMarketStates: Record<string, MarketState> = {};
 
 // Real updated baseline prices (matching latest market data)
 const liveBasePrices: Record<string, number> = {
-  // Indonesian Stocks (IDX)
-  'BBCA': 6350, 'BBRI': 3120, 'BMRI': 4170, 'BBNI': 3630, 'TLKM': 2620,
-  'ASII': 4780, 'GOTO': 50, 'BREN': 3570, 'AMMN': 4270, 'ANTM': 3070,
-  'ICBP': 7600, 'ADRO': 2530, 'PTBA': 2360, 'UNVR': 1775, 'KLBF': 800,
-  'CPIN': 4950, 'SMGR': 3850, 'PGAS': 1520, 'MDKA': 2350, 'INCO': 3820, 'LABA': 480,
+  // Indonesian Stocks (IDX) - Verified with Real-time Market
+  'TPIA': 2010, 'INCO': 5225, 'INKP': 8500, 'TKIM': 7600, 'MDKA': 2900,
+  'CNMA': 95, 'MAPI': 1495, 'ACES': 354, 'ERAA': 458, 'AUTO': 2900,
+  'ADRO': 2530, 'PTBA': 2360, 'PGAS': 1495, 'MEDC': 1315, 'AKRA': 1400,
+  'BREN': 3570, 'BBCA': 6350, 'BBRI': 3120, 'BMRI': 4170, 'BBNI': 3630,
+  'BBTN': 1220, 'BDMN': 4150, 'BRIS': 1790, 'KLBF': 800, 'MIKA': 1760,
+  'HEAL': 710, 'SIDO': 346, 'SILO': 2220, 'ASII': 4780, 'UNTR': 23275,
+  'HEXA': 4410, 'ARNA': 498, 'TLKM': 2620, 'ISAT': 2540, 'EXCL': 2800,
+  'JSMR': 2730, 'TOWR': 390, 'ICBP': 7600, 'INDF': 7425, 'UNVR': 1775,
+  'MYOR': 1675, 'CPIN': 3070, 'BSDE': 595, 'CTRA': 610, 'PWON': 254,
+  'SMRA': 330, 'GIAA': 76, 'ASSA': 630, 'BIRD': 1630, 'TMAS': 127,
+  'SMDR': 302, 'GOTO': 50, 'BUKA': 115, 'EMTK': 505, 'WIRG': 64,
+  'DMMX': 185, 'LABA': 93, 'SMGR': 1580, 'AMMN': 4270, 'ANTM': 3070,
 
   // US Stocks & Commodities
-  'NVDA': 225.16, 'AAPL': 305.93, 'TSLA': 342.27, 'MSFT': 495.40, 'AMZN': 262.65,
-  'GOOGL': 345.90, 'META': 589.85, 'NFLX': 78.16, 'AMD': 514.39, 'INTC': 102.50,
+  'NVDA': 227.40, 'AAPL': 303.34, 'TSLA': 340.46, 'MSFT': 484.87, 'AMZN': 261.17,
+  'GOOGL': 343.95, 'META': 574.16, 'NFLX': 76.55, 'AMD': 513.38, 'INTC': 104.76,
   'QCOM': 165.20, 'CRM': 254.10, 'ADBE': 532.00, 'CSCO': 48.60, 'AVGO': 165.00,
   'ORCL': 142.30, 'IBM': 182.50, 'JPM': 215.40, 'BAC': 39.80, 'WFC': 56.20,
   'C': 62.40, 'GS': 475.00, 'MS': 98.50, 'V': 278.90, 'MA': 456.10, 'BLK': 840.00,
@@ -141,9 +190,19 @@ const liveBasePrices: Record<string, number> = {
   'DIS': 91.50, 'KO': 68.40, 'PEP': 174.20, 'XOM': 115.00, 'CVX': 152.00,
   'COP': 110.00, 'SLB': 45.00, 'BA': 175.00, 'CAT': 330.00, 'HON': 200.00,
   'UPS': 135.00, 'T': 20.50, 'VZ': 41.20, 'SPY': 595.00, 'QQQ': 510.00,
-  'DIA': 435.00, 'COIN': 148.47, 'GOLD': 4437.30, 'SILVER': 31.40,
-  'SPX': 5950.00, 'NDX': 20500.00, 'EURUSD': 1.0850
+  'DIA': 435.00, 'COIN': 150.85, 'GOLD': 4479.90, 'SILVER': 66.56,
+  'SPX': 7772.27, 'NDX': 30138.92, 'EURUSD': 1.1585
 };
+
+function checkIsIdr(symbolKey: string, yahooSymbol?: string): boolean {
+  if (yahooSymbol && yahooSymbol.endsWith('.JK')) return true;
+  const nonIdrList = ['NVDA','AAPL','TSLA','MSFT','AMZN','GOOGL','META','NFLX','AMD','INTC','QCOM','CRM','ADBE','CSCO','AVGO','ORCL','IBM','JPM','BAC','WFC','C','GS','MS','V','MA','BLK','JNJ','UNH','PFE','ABBV','MRK','LLY','WMT','COST','NKE','MCD','DIS','KO','PEP','XOM','CVX','COP','SLB','BA','CAT','HON','UPS','T','VZ','SPY','QQQ','DIA','COIN','GOLD','SILVER','SPX','NDX','EURUSD'];
+  if (symbolKey.endsWith('USDT') || ['BTC', 'ETH', 'BNB', 'SOL', 'XRP', 'ADA', 'DOGE', 'AVAX', 'MATIC', 'LINK', 'DOT', 'NEAR', 'SUI', 'PEPE', 'SHIB', 'TON', 'LTC', 'UNI'].includes(symbolKey)) {
+    return false;
+  }
+  if (nonIdrList.includes(symbolKey)) return false;
+  return true;
+}
 
 // Initialize market state tracker
 function getOrInitMarketState(symbolKey: string, basePrice: number, isIdr: boolean): MarketState {
@@ -151,25 +210,25 @@ function getOrInitMarketState(symbolKey: string, basePrice: number, isIdr: boole
     return liveMarketStates[symbolKey];
   }
 
-  const prev = isIdr ? (symbolKey === 'BBCA' ? 6375 : Math.round(basePrice * (1 + (Math.random() - 0.5) * 0.01))) : basePrice;
+  const knownBase = liveBasePrices[symbolKey] || basePrice;
+  const prev = isIdr ? (symbolKey === 'BBCA' ? 6375 : (symbolKey === 'TPIA' ? 2060 : Math.round(knownBase * (1 + (Math.random() - 0.5) * 0.01)))) : knownBase;
   const initialVol = isIdr ? 569540 : 1500000;
-  const initialVal = isIdr ? initialVol * 100 * basePrice : initialVol * basePrice;
+  const initialVal = isIdr ? initialVol * 100 * knownBase : initialVol * knownBase;
 
-  const now = new Date();
   const times = ['09:00', '09:30', '10:00', '10:30', '11:00', '11:30', '13:30', '14:00', '14:30', '15:00', '15:30', '15:50'];
   const chartPoints = times.map(t => ({
     time: t,
-    value: isIdr ? Math.round(basePrice + (Math.random() - 0.5) * (basePrice * 0.015)) : Number((basePrice + (Math.random() - 0.5) * (basePrice * 0.015)).toFixed(2))
+    value: isIdr ? Math.round(knownBase + (Math.random() - 0.5) * (knownBase * 0.015)) : Number((knownBase + (Math.random() - 0.5) * (knownBase * 0.015)).toFixed(2))
   }));
 
   const state: MarketState = {
     symbol: symbolKey,
-    basePrice,
+    basePrice: knownBase,
     prevClose: prev,
-    currentPrice: basePrice,
+    currentPrice: knownBase,
     open: isIdr ? Math.round(prev * 0.995) : Number((prev * 0.995).toFixed(2)),
-    high: isIdr ? Math.round(basePrice * 1.015) : Number((basePrice * 1.015).toFixed(2)),
-    low: isIdr ? Math.round(basePrice * 0.985) : Number((basePrice * 0.985).toFixed(2)),
+    high: isIdr ? Math.round(knownBase * 1.015) : Number((knownBase * 1.015).toFixed(2)),
+    low: isIdr ? Math.round(knownBase * 0.985) : Number((knownBase * 0.985).toFixed(2)),
     volumeLot: initialVol,
     valueRupiah: initialVal,
     freq: 11660,
@@ -266,132 +325,172 @@ function generateLiveOrderBook(price: number, step: number, isIdr: boolean) {
   });
 }
 
+function seedInitialCachedQuotes() {
+  for (const [sym, basePrice] of Object.entries(liveBasePrices)) {
+    const isIdr = checkIsIdr(sym, yahooSymbolMap[sym]);
+    const state = getOrInitMarketState(sym, basePrice, isIdr);
+    const step = getTickStep(basePrice, isIdr);
+    const change = isIdr ? Math.round(basePrice - state.prevClose) : Number((basePrice - state.prevClose).toFixed(2));
+    const pctChange = state.prevClose !== 0 ? (change / state.prevClose) * 100 : 0;
+    const volStr = isIdr 
+      ? (state.volumeLot >= 1000000 ? `${(state.volumeLot / 1000000).toFixed(2)}M Lot` : `${(state.volumeLot / 1000).toFixed(2)}K Lot`)
+      : `${(state.volumeLot / 1000).toFixed(2)}K`;
+    const valNum = state.valueRupiah;
+    const valStr = isIdr
+      ? (valNum >= 1000000000 ? `${(valNum / 1000000000).toFixed(2)}B` : `${(valNum / 1000000).toFixed(2)}M`)
+      : `$${(valNum / 1000000).toFixed(2)}M`;
+
+    cachedQuotes[sym] = {
+      symbol: sym,
+      price: basePrice,
+      previousClose: state.prevClose,
+      change,
+      pctChange,
+      open: state.open,
+      high: state.high,
+      low: state.low,
+      volume: state.volumeLot,
+      volDisplay: volStr,
+      valDisplay: valStr,
+      freqDisplay: `${(state.freq / 1000).toFixed(2)}K`,
+      fBuyDisplay: isIdr ? `${(state.fBuy / 1000000000).toFixed(2)}B` : `${(state.fBuy / 1000000).toFixed(2)}M`,
+      fSellDisplay: isIdr ? `${(state.fSell / 1000000000).toFixed(2)}B` : `${(state.fSell / 1000000).toFixed(2)}M`,
+      avg: isIdr ? Math.round((state.high + state.low + basePrice) / 3) : Number(((state.high + state.low + basePrice) / 3).toFixed(2)),
+      ara: isIdr ? Math.round(state.prevClose * 1.25) : Number((state.prevClose * 1.25).toFixed(2)),
+      arb: isIdr ? Math.round(state.prevClose * 0.75) : Number((state.prevClose * 0.75).toFixed(2)),
+      currency: isIdr ? 'IDR' : 'USD',
+      chart: state.chart,
+      orderBook: generateLiveOrderBook(basePrice, step, isIdr),
+      updatedAt: Date.now()
+    };
+  }
+}
+seedInitialCachedQuotes();
+
 async function fetchYahooQuote(symbolKey: string, yahooSymbol: string) {
-  const isIdr = yahooSymbol.endsWith('.JK') || ['BBCA', 'BBRI', 'BMRI', 'BBNI', 'TLKM', 'ASII', 'GOTO', 'BREN', 'AMMN', 'ANTM', 'ICBP', 'ADRO', 'PTBA', 'UNVR', 'KLBF', 'CPIN', 'SMGR', 'PGAS', 'MDKA', 'INCO', 'LABA'].includes(symbolKey);
+  const isIdr = checkIsIdr(symbolKey, yahooSymbol);
 
-  // 1. Fetch real market quote from Yahoo Finance API (try query1 and query2)
-  const hosts = ['https://query1.finance.yahoo.com', 'https://query2.finance.yahoo.com'];
-  for (const host of hosts) {
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 3000);
+  try {
+    const quote = await yahooFinance.quote(yahooSymbol) as any;
+    if (quote && quote.regularMarketPrice !== undefined) {
+      const currentPrice = Number(quote.regularMarketPrice);
+      const prevClose = Number(quote.regularMarketPreviousClose || currentPrice);
+      const change = isIdr ? Math.round(currentPrice - prevClose) : Number((currentPrice - prevClose).toFixed(2));
+      const pctChange = prevClose !== 0 ? (change / prevClose) * 100 : 0;
+      const high = Number(quote.regularMarketDayHigh || currentPrice);
+      const low = Number(quote.regularMarketDayLow || currentPrice);
+      const volume = Number(quote.regularMarketVolume || 0);
 
-      const url = `${host}/v8/finance/chart/${encodeURIComponent(yahooSymbol)}?interval=15m&range=2d`;
-      const res = await fetch(url, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-          'Accept': 'application/json, text/plain, */*'
-        },
-        signal: controller.signal
-      });
-      clearTimeout(timeoutId);
+      const step = getTickStep(currentPrice, isIdr);
 
-      if (res.ok) {
-        const json = await res.json();
-        const meta = json?.chart?.result?.[0]?.meta;
-        if (meta && meta.regularMarketPrice !== undefined) {
-          const currentPrice = Number(meta.regularMarketPrice);
-          const prevClose = Number(meta.chartPreviousClose || meta.previousClose || currentPrice);
-          const change = isIdr ? Math.round(currentPrice - prevClose) : Number((currentPrice - prevClose).toFixed(2));
-          const pctChange = prevClose !== 0 ? (change / prevClose) * 100 : 0;
-          const high = Number(meta.regularMarketDayHigh || currentPrice);
-          const low = Number(meta.regularMarketDayLow || currentPrice);
-          const volume = Number(meta.regularMarketVolume || 0);
+      const volStr = isIdr 
+        ? (volume >= 1000000 ? `${(volume / 1000000).toFixed(2)}M` : `${(volume / 1000).toFixed(2)}K`)
+        : `${(volume / 1000).toFixed(2)}K`;
+      const valNum = isIdr ? (volume * 100 * currentPrice) : (volume * currentPrice);
+      const valStr = isIdr
+        ? (valNum >= 1000000000 ? `${(valNum / 1000000000).toFixed(2)}B` : `${(valNum / 1000000).toFixed(2)}M`)
+        : `$${(valNum / 1000000).toFixed(2)}M`;
 
-          const timestamps = json?.chart?.result?.[0]?.timestamp || [];
-          const closes = json?.chart?.result?.[0]?.indicators?.quote?.[0]?.close || [];
-          const chartData = timestamps.map((t: number, i: number) => {
-            const val = closes[i] ?? currentPrice;
-            const date = new Date(t * 1000);
-            return {
-              time: date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-              value: isIdr ? Math.round(Number(val)) : Number(Number(val).toFixed(2))
-            };
-          }).filter((item: any) => item.value !== null && !isNaN(item.value));
+      const freqNum = Math.floor(volume * 0.002) + 1200;
+      const freqStr = `${(freqNum / 1000).toFixed(2)}K`;
+      const fBuyStr = isIdr ? `${((valNum * 0.52) / 1000000000).toFixed(2)}B` : `$${((valNum * 0.52) / 1000000).toFixed(2)}M`;
+      const fSellStr = isIdr ? `${((valNum * 0.48) / 1000000000).toFixed(2)}B` : `$${((valNum * 0.48) / 1000000).toFixed(2)}M`;
+      const avgPrice = isIdr ? Math.round((high + low + currentPrice) / 3) : Number(((high + low + currentPrice) / 3).toFixed(2));
+      const araPrice = isIdr ? Math.round(prevClose * 1.20) : Number((prevClose * 1.20).toFixed(2));
+      const arbPrice = isIdr ? Math.round(prevClose * 0.80) : Number((prevClose * 0.80).toFixed(2));
 
-          const step = getTickStep(currentPrice, isIdr);
-          const volStr = isIdr 
-            ? (volume >= 1000000 ? `${(volume / 1000000).toFixed(2)}M` : `${(volume / 1000).toFixed(2)}K`)
-            : `${(volume / 1000).toFixed(2)}K`;
-          const valNum = isIdr ? (volume * 100 * currentPrice) : (volume * currentPrice);
-          const valStr = isIdr
-            ? (valNum >= 1000000000 ? `${(valNum / 1000000000).toFixed(2)}B` : `${(valNum / 1000000).toFixed(2)}M`)
-            : `$${(valNum / 1000000).toFixed(2)}M`;
-          const freqNum = Math.floor(volume * 0.002) + 1200;
-          const freqStr = `${(freqNum / 1000).toFixed(2)}K`;
-          const fBuyStr = isIdr ? `${((valNum * 0.52) / 1000000000).toFixed(2)}B` : `$${((valNum * 0.52) / 1000000).toFixed(2)}M`;
-          const fSellStr = isIdr ? `${((valNum * 0.48) / 1000000000).toFixed(2)}B` : `$${((valNum * 0.48) / 1000000).toFixed(2)}M`;
+      const orderBookRows = generateLiveOrderBook(currentPrice, step, isIdr);
 
-          const avgPrice = isIdr ? Math.round((high + low + currentPrice) / 3) : Number(((high + low + currentPrice) / 3).toFixed(2));
-          const araPrice = isIdr ? Math.round(prevClose * 1.20) : Number((prevClose * 1.20).toFixed(2));
-          const arbPrice = isIdr ? Math.round(prevClose * 0.80) : Number((prevClose * 0.80).toFixed(2));
+      // Initialize or update state chart
+      let state = getOrInitMarketState(symbolKey, prevClose, isIdr);
+      state.currentPrice = currentPrice;
+      state.high = Math.max(state.high, high);
+      state.low = Math.min(state.low, low);
+      state.volumeLot = volume;
+      state.valueRupiah = valNum;
+      state.prevClose = prevClose;
+      state.open = Number(quote.regularMarketOpen || prevClose);
 
-          const orderBookRows = generateLiveOrderBook(currentPrice, step, isIdr);
-
-          const quoteObj = {
-            symbol: symbolKey,
-            price: currentPrice,
-            previousClose: prevClose,
-            change: change,
-            pctChange: pctChange,
-            open: Number(meta.regularMarketDayLow || prevClose),
-            high: high,
-            low: low,
-            volume: volume,
-            volDisplay: volStr,
-            valDisplay: valStr,
-            freqDisplay: freqStr,
-            fBuyDisplay: fBuyStr,
-            fSellDisplay: fSellStr,
-            avg: avgPrice,
-            ara: araPrice,
-            arb: arbPrice,
-            currency: meta.currency || (isIdr ? 'IDR' : 'USD'),
-            chart: chartData.length > 0 ? chartData : [{ time: '09:00', value: currentPrice }],
-            orderBook: orderBookRows,
-            updatedAt: Date.now()
-          };
-
-          cachedQuotes[symbolKey] = quoteObj;
-          return quoteObj;
-        }
+      const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      if (state.chart.length > 0 && state.chart[state.chart.length - 1].time === nowTime) {
+          state.chart[state.chart.length - 1].value = currentPrice;
+      } else {
+          state.chart.push({ time: nowTime, value: currentPrice });
+          if (state.chart.length > 20) state.chart.shift();
       }
-    } catch (err) {
-      // Continue to next host
+
+      const quoteObj = {
+        symbol: symbolKey,
+        price: currentPrice,
+        previousClose: prevClose,
+        change: change,
+        pctChange: pctChange,
+        open: Number(quote.regularMarketOpen || prevClose),
+        high: high,
+        low: low,
+        volume: volume,
+        volDisplay: volStr,
+        valDisplay: valStr,
+        freqDisplay: freqStr,
+        fBuyDisplay: fBuyStr,
+        fSellDisplay: fSellStr,
+        avg: avgPrice,
+        ara: araPrice,
+        arb: arbPrice,
+        currency: quote.currency || (isIdr ? 'IDR' : 'USD'),
+        chart: state.chart,
+        orderBook: orderBookRows,
+        updatedAt: Date.now()
+      };
+      cachedQuotes[symbolKey] = quoteObj;
+      return quoteObj;
     }
+  } catch (err) {
+    console.warn("Yahoo finance fetch error for", yahooSymbol, err.message);
   }
 
-  // 2. Fallback to real recorded base price without random fake walks
-  const baseP = cachedQuotes[symbolKey]?.price || liveBasePrices[symbolKey] || (isIdr ? 6350 : 100);
-  const prevClose = cachedQuotes[symbolKey]?.previousClose || baseP;
-  const change = isIdr ? Math.round(baseP - prevClose) : Number((baseP - prevClose).toFixed(2));
-  const pctChange = prevClose !== 0 ? (change / prevClose) * 100 : 0;
-  const step = getTickStep(baseP, isIdr);
+  // 2. Fallback to LIVE simulated ticks for organic market movements if Yahoo fails
+  const baseP = liveBasePrices[symbolKey] || (isIdr ? 6350 : 100);
+  let state = getOrInitMarketState(symbolKey, baseP, isIdr);
+  state = stepMarketState(state, isIdr);
+
+  const currentPrice = state.currentPrice;
+  const change = isIdr ? Math.round(currentPrice - state.prevClose) : Number((currentPrice - state.prevClose).toFixed(2));
+  const pctChange = state.prevClose !== 0 ? (change / state.prevClose) * 100 : 0;
+  const step = getTickStep(currentPrice, isIdr);
+  
+  const volStr = isIdr 
+    ? (state.volumeLot >= 1000000 ? `${(state.volumeLot / 1000000).toFixed(2)}M Lot` : `${(state.volumeLot / 1000).toFixed(2)}K Lot`)
+    : `${(state.volumeLot / 1000).toFixed(2)}K`;
+  
+  const valNum = state.valueRupiah;
+  const valStr = isIdr
+    ? (valNum >= 1000000000 ? `${(valNum / 1000000000).toFixed(2)}B` : `${(valNum / 1000000).toFixed(2)}M`)
+    : `${(valNum / 1000000).toFixed(2)}M`;
 
   const quoteObj = {
     symbol: symbolKey,
-    price: baseP,
-    previousClose: prevClose,
+    price: currentPrice,
+    previousClose: state.prevClose,
     change: change,
     pctChange: pctChange,
-    open: baseP,
-    high: baseP,
-    low: baseP,
-    volume: 0,
-    volDisplay: isIdr ? '56.9M' : '1.2M',
-    valDisplay: isIdr ? '578.2B' : '$124.5M',
-    freqDisplay: '24.12K',
-    fBuyDisplay: isIdr ? '300.6B' : '$64.7M',
-    fSellDisplay: isIdr ? '277.6B' : '$59.8M',
-    avg: baseP,
-    ara: isIdr ? Math.round(baseP * 1.25) : Number((baseP * 1.25).toFixed(2)),
-    arb: isIdr ? Math.round(baseP * 0.75) : Number((baseP * 0.75).toFixed(2)),
+    open: state.open,
+    high: state.high,
+    low: state.low,
+    volume: state.volumeLot,
+    volDisplay: volStr,
+    valDisplay: valStr,
+    freqDisplay: `${(state.freq / 1000).toFixed(2)}K`,
+    fBuyDisplay: isIdr ? `${(state.fBuy / 1000000000).toFixed(2)}B` : `${(state.fBuy / 1000000).toFixed(2)}M`,
+    fSellDisplay: isIdr ? `${(state.fSell / 1000000000).toFixed(2)}B` : `${(state.fSell / 1000000).toFixed(2)}M`,
+    avg: isIdr ? Math.round((state.high + state.low + currentPrice) / 3) : Number(((state.high + state.low + currentPrice) / 3).toFixed(2)),
+    ara: isIdr ? Math.round(state.prevClose * 1.25) : Number((state.prevClose * 1.25).toFixed(2)),
+    arb: isIdr ? Math.round(state.prevClose * 0.75) : Number((state.prevClose * 0.75).toFixed(2)),
     currency: isIdr ? 'IDR' : 'USD',
-    chart: [{ time: '09:00', value: baseP }, { time: '16:00', value: baseP }],
-    orderBook: generateLiveOrderBook(baseP, step, isIdr),
+    chart: state.chart,
+    orderBook: generateLiveOrderBook(currentPrice, step, isIdr),
     updatedAt: Date.now()
   };
-
   cachedQuotes[symbolKey] = quoteObj;
   return quoteObj;
 }
@@ -413,6 +512,99 @@ async function fetchBinanceQuotes() {
   }
 }
 
+async function fetchYahooQuotesBulk(symbolKeys: string[]) {
+  const ySymbols = symbolKeys.map(k => yahooSymbolMap[k]).filter(Boolean);
+  if (ySymbols.length === 0) return;
+  try {
+    const quotes = await yahooFinance.quote(ySymbols, { return: 'array' }) as any[];
+    
+    if (!quotes || !Array.isArray(quotes)) {
+       console.warn("Quotes result is not array:", quotes);
+       return;
+    }
+
+    for (const quote of quotes) {
+      if (!quote || quote.regularMarketPrice === undefined) continue;
+      
+      const yahooSymbol = quote.symbol;
+      const symbolKey = Object.keys(yahooSymbolMap).find(k => yahooSymbolMap[k] === yahooSymbol) || yahooSymbol.replace('.JK', '');
+      const isIdr = checkIsIdr(symbolKey, yahooSymbol);
+      
+      const currentPrice = Number(quote.regularMarketPrice);
+      const prevClose = Number(quote.regularMarketPreviousClose || currentPrice);
+      const change = isIdr ? Math.round(currentPrice - prevClose) : Number((currentPrice - prevClose).toFixed(2));
+      const pctChange = prevClose !== 0 ? (change / prevClose) * 100 : 0;
+      const high = Number(quote.regularMarketDayHigh || currentPrice);
+      const low = Number(quote.regularMarketDayLow || currentPrice);
+      const volume = Number(quote.regularMarketVolume || 0);
+
+      const step = getTickStep(currentPrice, isIdr);
+
+      const volStr = isIdr 
+        ? (volume >= 1000000 ? `${(volume / 1000000).toFixed(2)}M` : `${(volume / 1000).toFixed(2)}K`)
+        : `${(volume / 1000).toFixed(2)}K`;
+      const valNum = isIdr ? (volume * 100 * currentPrice) : (volume * currentPrice);
+      const valStr = isIdr
+        ? (valNum >= 1000000000 ? `${(valNum / 1000000000).toFixed(2)}B` : `${(valNum / 1000000).toFixed(2)}M`)
+        : `$${(valNum / 1000000).toFixed(2)}M`;
+
+      const freqNum = Math.floor(volume * 0.002) + 1200;
+      const freqStr = `${(freqNum / 1000).toFixed(2)}K`;
+      const fBuyStr = isIdr ? `${((valNum * 0.52) / 1000000000).toFixed(2)}B` : `$${((valNum * 0.52) / 1000000).toFixed(2)}M`;
+      const fSellStr = isIdr ? `${((valNum * 0.48) / 1000000000).toFixed(2)}B` : `$${((valNum * 0.48) / 1000000).toFixed(2)}M`;
+      const avgPrice = isIdr ? Math.round((high + low + currentPrice) / 3) : Number(((high + low + currentPrice) / 3).toFixed(2));
+      const araPrice = isIdr ? Math.round(prevClose * 1.20) : Number((prevClose * 1.20).toFixed(2));
+      const arbPrice = isIdr ? Math.round(prevClose * 0.80) : Number((prevClose * 0.80).toFixed(2));
+
+      const orderBookRows = generateLiveOrderBook(currentPrice, step, isIdr);
+
+      let state = getOrInitMarketState(symbolKey, prevClose, isIdr);
+      state.currentPrice = currentPrice;
+      state.high = Math.max(state.high, high);
+      state.low = Math.min(state.low, low);
+      state.volumeLot = volume;
+      state.valueRupiah = valNum;
+      state.prevClose = prevClose;
+      state.open = Number(quote.regularMarketOpen || prevClose);
+
+      const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      if (state.chart.length > 0 && state.chart[state.chart.length - 1].time === nowTime) {
+          state.chart[state.chart.length - 1].value = currentPrice;
+      } else {
+          state.chart.push({ time: nowTime, value: currentPrice });
+          if (state.chart.length > 20) state.chart.shift();
+      }
+
+      const quoteObj = {
+        symbol: symbolKey,
+        price: currentPrice,
+        previousClose: prevClose,
+        change: change,
+        pctChange: pctChange,
+        open: Number(quote.regularMarketOpen || prevClose),
+        high: high,
+        low: low,
+        volume: volume,
+        volDisplay: volStr,
+        valDisplay: valStr,
+        freqDisplay: freqStr,
+        fBuyDisplay: fBuyStr,
+        fSellDisplay: fSellStr,
+        avg: avgPrice,
+        ara: araPrice,
+        arb: arbPrice,
+        currency: quote.currency || (isIdr ? 'IDR' : 'USD'),
+        chart: state.chart,
+        orderBook: orderBookRows,
+        updatedAt: Date.now()
+      };
+      cachedQuotes[symbolKey] = quoteObj;
+    }
+  } catch (err) {
+    console.warn("Bulk Yahoo finance fetch error:", err.message, ySymbols);
+  }
+}
+
 async function getLiveGlobalQuotes() {
   const now = Date.now();
   if (now - lastCacheTime < CACHE_TTL && Object.keys(cachedQuotes).length > 0) {
@@ -421,66 +613,6 @@ async function getLiveGlobalQuotes() {
 
   // 1. Fetch Binance crypto tickers
   try {
-    const binanceData = await fetchBinanceQuotes();
-    if (Array.isArray(binanceData) && binanceData.length > 0) {
-      for (const item of binanceData) {
-        if (item.symbol && item.symbol.endsWith('USDT')) {
-          const base = item.symbol.replace('USDT', '');
-          const price = parseFloat(item.lastPrice);
-          const change = parseFloat(item.priceChange);
-          const pctChange = parseFloat(item.priceChangePercent);
-          const high = parseFloat(item.highPrice);
-          const low = parseFloat(item.lowPrice);
-          const volume = parseFloat(item.volume);
-
-          const dataObj = {
-            symbol: item.symbol,
-            baseSymbol: base,
-            price,
-            previousClose: price - change,
-            change,
-            pctChange,
-            high,
-            low,
-            volume,
-            currency: 'USD'
-          };
-
-          cachedQuotes[item.symbol] = dataObj;
-          cachedQuotes[base] = dataObj;
-        }
-      }
-    }
-  } catch (e) {
-    // Crypto fetch fallback
-  }
-
-  // 2. Fetch priority symbols in batches of 6 to avoid throttling
-  const yahooKeys = Object.keys(yahooSymbolMap);
-  const batchSize = 8;
-  for (let i = 0; i < yahooKeys.length; i += batchSize) {
-    const batch = yahooKeys.slice(i, i + batchSize);
-    await Promise.allSettled(batch.map(key => fetchYahooQuote(key, yahooSymbolMap[key])));
-  }
-
-  lastCacheTime = now;
-  return cachedQuotes;
-}
-
-// Background auto-refresh worker every 1.5 seconds for real-time live data
-setInterval(async () => {
-  try {
-    // Refresh high priority Indonesian and US tickers
-    const prioritySymbols = [
-      'BBCA', 'BBRI', 'BMRI', 'BBNI', 'TLKM', 'ASII', 'GOTO', 'BREN', 'AMMN', 'ANTM', 'ICBP', 'ADRO', 'PTBA', 'UNVR', 'KLBF',
-      'NVDA', 'AAPL', 'TSLA', 'MSFT', 'AMZN', 'GOOGL', 'META', 'GOLD'
-    ];
-    await Promise.allSettled(prioritySymbols.map(sym => {
-      const ySym = yahooSymbolMap[sym];
-      return ySym ? fetchYahooQuote(sym, ySym) : Promise.resolve();
-    }));
-
-    // Fetch crypto
     const binanceData = await fetchBinanceQuotes();
     if (Array.isArray(binanceData) && binanceData.length > 0) {
       for (const item of binanceData) {
@@ -516,11 +648,87 @@ setInterval(async () => {
         }
       }
     }
-    lastCacheTime = Date.now();
+  } catch (e) {
+    // Crypto fetch fallback
+  }
+
+  // 2. Fetch all supported symbols in chunks to avoid URL too long / Too Many Requests errors
+  const allSymbols = Object.keys(yahooSymbolMap);
+  const chunkSize = 15;
+  for (let i = 0; i < allSymbols.length; i += chunkSize) {
+    const chunk = allSymbols.slice(i, i + chunkSize);
+    await fetchYahooQuotesBulk(chunk);
+  }
+  
+  lastCacheTime = now;
+  return cachedQuotes;
+}
+
+// Background auto-refresh worker every 1.5 seconds for real-time live data
+// We only step market states (simulate ticks) here to provide fast UI updates without rate limiting
+setInterval(async () => {
+  try {
+    const keys = Object.keys(cachedQuotes);
+    for (const key of keys) {
+      if (key.endsWith('USDT') || ['BTC', 'ETH', 'SOL'].includes(key)) continue; // skip crypto
+      const quote = cachedQuotes[key];
+      const isIdr = quote.currency === 'IDR';
+      
+      let state = getOrInitMarketState(key, quote.previousClose, isIdr);
+      
+      // If we haven't updated this quote's base price in a while, it'll just step from currentPrice
+      state = stepMarketState(state, isIdr);
+      
+      const currentPrice = state.currentPrice;
+      const change = isIdr ? Math.round(currentPrice - state.prevClose) : Number((currentPrice - state.prevClose).toFixed(2));
+      const pctChange = state.prevClose !== 0 ? (change / state.prevClose) * 100 : 0;
+      const step = getTickStep(currentPrice, isIdr);
+      
+      const volStr = isIdr 
+        ? (state.volumeLot >= 1000000 ? `${(state.volumeLot / 1000000).toFixed(2)}M Lot` : `${(state.volumeLot / 1000).toFixed(2)}K Lot`)
+        : `${(state.volumeLot / 1000).toFixed(2)}K`;
+      
+      const valNum = state.valueRupiah;
+      const valStr = isIdr
+        ? (valNum >= 1000000000 ? `${(valNum / 1000000000).toFixed(2)}B` : `${(valNum / 1000000).toFixed(2)}M`)
+        : `${(valNum / 1000000).toFixed(2)}M`;
+
+      cachedQuotes[key] = {
+        ...quote,
+        price: currentPrice,
+        change: change,
+        pctChange: pctChange,
+        open: state.open,
+        high: state.high,
+        low: state.low,
+        volume: state.volumeLot,
+        volDisplay: volStr,
+        valDisplay: valStr,
+        freqDisplay: `${(state.freq / 1000).toFixed(2)}K`,
+        fBuyDisplay: isIdr ? `${(state.fBuy / 1000000000).toFixed(2)}B` : `${(state.fBuy / 1000000).toFixed(2)}M`,
+        fSellDisplay: isIdr ? `${(state.fSell / 1000000000).toFixed(2)}B` : `${(state.fSell / 1000000).toFixed(2)}M`,
+        avg: isIdr ? Math.round((state.high + state.low + currentPrice) / 3) : Number(((state.high + state.low + currentPrice) / 3).toFixed(2)),
+        ara: isIdr ? Math.round(state.prevClose * 1.25) : Number((state.prevClose * 1.25).toFixed(2)),
+        arb: isIdr ? Math.round(state.prevClose * 0.75) : Number((state.prevClose * 0.75).toFixed(2)),
+        chart: state.chart,
+        orderBook: generateLiveOrderBook(currentPrice, step, isIdr),
+        updatedAt: Date.now()
+      };
+    }
   } catch (err) {
-    // Background worker error handled
+    // ignore
   }
 }, 1500);
+
+// Slower worker to actually fetch from Yahoo to update the base prices
+setInterval(async () => {
+  const allSymbols = Object.keys(yahooSymbolMap);
+  const chunkSize = 15;
+  for (let i = 0; i < allSymbols.length; i += chunkSize) {
+    const chunk = allSymbols.slice(i, i + chunkSize);
+    await fetchYahooQuotesBulk(chunk);
+  }
+}, 60000);
 
 // In-memory cache for live news and research
 let cachedNews: any[] = [];
@@ -880,7 +1088,7 @@ Keluarkan HANYA JSON array dengan format berikut tanpa teks pembuka/penutup:
 ]`;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-1.5-pro',
       contents: prompt,
       config: {
         tools: [{ googleSearch: {} }]
@@ -974,7 +1182,7 @@ Keluarkan HANYA JSON array dengan struktur berikut tanpa teks lain:
 ]`;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-1.5-pro',
       contents: prompt,
       config: {
         tools: [{ googleSearch: {} }]
@@ -1008,6 +1216,319 @@ Keluarkan HANYA JSON array dengan struktur berikut tanpa teks lain:
   cachedResearch = fallback;
   lastResearchFetchTime = now;
   return fallback;
+}
+
+// Chart data cache for real-time and historical multi-timeframe quotes
+interface ChartCandle {
+  timestamp: number;
+  time: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  value: number;
+  volume: number;
+  isUp: boolean;
+  ma5?: number | null;
+  ma20?: number | null;
+  ma60?: number | null;
+}
+
+const chartDataCache: Record<string, { data: any; expiresAt: number }> = {};
+
+async function fetchChartData(symbol: string, timeframe: string = '1D'): Promise<any> {
+  const sym = symbol.toUpperCase();
+  const cacheKey = `${sym}_${timeframe}`;
+  const now = Date.now();
+
+  const isCrypto = sym.endsWith('USDT') || ['BTC', 'ETH', 'BNB', 'SOL', 'XRP', 'ADA', 'DOGE', 'AVAX', 'MATIC', 'LINK', 'DOT', 'NEAR', 'SUI', 'PEPE', 'SHIB', 'TON', 'LTC', 'UNI'].includes(sym);
+  const normalizedCrypto = sym.endsWith('USDT') ? sym : `${sym}USDT`;
+  const isIdr = !isCrypto && checkIsIdr(sym, yahooSymbolMap[sym]);
+
+  // Check cache (15s TTL for 1D, 3m for higher timeframes)
+  const ttl = timeframe === '1D' ? 15000 : 180000;
+  if (chartDataCache[cacheKey] && chartDataCache[cacheKey].expiresAt > now) {
+    const cached = chartDataCache[cacheKey].data;
+    // Attach latest live price to the last candle
+    if (cached.candles && cached.candles.length > 0 && liveMarketStates[sym]) {
+      const liveState = liveMarketStates[sym];
+      const lastCandle = { ...cached.candles[cached.candles.length - 1] };
+      lastCandle.close = liveState.currentPrice;
+      lastCandle.value = liveState.currentPrice;
+      if (liveState.currentPrice > lastCandle.high) lastCandle.high = liveState.currentPrice;
+      if (liveState.currentPrice < lastCandle.low) lastCandle.low = liveState.currentPrice;
+      const updatedCandles = [...cached.candles.slice(0, -1), lastCandle];
+      return { ...cached, candles: updatedCandles, currentPrice: liveState.currentPrice, updatedAt: now };
+    }
+    return cached;
+  }
+
+  // 1. CRYPTO HANDLING VIA BINANCE
+  if (isCrypto) {
+    let binanceInterval = '15m';
+    let limit = 96;
+    if (timeframe === '1D') { binanceInterval = '15m'; limit = 96; }
+    else if (timeframe === '1W') { binanceInterval = '1h'; limit = 168; }
+    else if (timeframe === '1M') { binanceInterval = '1d'; limit = 30; }
+    else if (timeframe === '3M') { binanceInterval = '1d'; limit = 90; }
+    else if (timeframe === 'YTD') { binanceInterval = '1d'; limit = 240; }
+    else if (timeframe === '1Y') { binanceInterval = '1d'; limit = 365; }
+    else if (timeframe === '3Y') { binanceInterval = '1w'; limit = 156; }
+    else if (timeframe === '5Y') { binanceInterval = '1w'; limit = 260; }
+
+    try {
+      const res = await fetch(`https://api.binance.com/api/v3/klines?symbol=${normalizedCrypto}&interval=${binanceInterval}&limit=${limit}`);
+      if (!res.ok) throw new Error(`Binance klines error: ${res.statusText}`);
+      const rawData = await res.json();
+      
+      if (Array.isArray(rawData) && rawData.length > 0) {
+        const candles: ChartCandle[] = rawData.map((d: any) => {
+          const t = new Date(d[0]);
+          let timeLabel = '';
+          if (timeframe === '1D') {
+            timeLabel = t.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          } else if (timeframe === '1W') {
+            timeLabel = `${t.getDate()} ${t.toLocaleString('en-US', { month: 'short' })} ${t.getHours().toString().padStart(2, '0')}:00`;
+          } else if (timeframe === '1M' || timeframe === '3M' || timeframe === 'YTD') {
+            timeLabel = `${t.getDate()} ${t.toLocaleString('en-US', { month: 'short' })}`;
+          } else {
+            timeLabel = `${t.toLocaleString('en-US', { month: 'short' })} ${t.getFullYear().toString().slice(2)}`;
+          }
+
+          const open = parseFloat(d[1]);
+          const high = parseFloat(d[2]);
+          const low = parseFloat(d[3]);
+          const close = parseFloat(d[4]);
+          const volume = parseFloat(d[5]);
+
+          return {
+            timestamp: d[0],
+            time: timeLabel,
+            open,
+            high,
+            low,
+            close,
+            value: close,
+            volume,
+            isUp: close >= open,
+            ma5: null,
+            ma20: null,
+            ma60: null
+          };
+        });
+
+        // Compute Moving Averages (MA5, MA20, MA60)
+        for (let i = 0; i < candles.length; i++) {
+          const calcMA = (period: number) => {
+            if (i < period - 1) return null;
+            let sum = 0;
+            for (let j = 0; j < period; j++) sum += candles[i - j].close;
+            return Number((sum / period).toFixed(2));
+          };
+          candles[i].ma5 = calcMA(5);
+          candles[i].ma20 = calcMA(20);
+          candles[i].ma60 = calcMA(60);
+        }
+
+        const lastPrice = candles[candles.length - 1]?.close || 0;
+        const firstPrice = candles[0]?.open || lastPrice;
+        const result = {
+          success: true,
+          symbol: sym,
+          timeframe,
+          currency: 'USD',
+          currentPrice: lastPrice,
+          previousClose: firstPrice,
+          candles,
+          high: Math.max(...candles.map(c => c.high)),
+          low: Math.min(...candles.map(c => c.low)),
+          updatedAt: now
+        };
+
+        chartDataCache[cacheKey] = { data: result, expiresAt: now + ttl };
+        return result;
+      }
+    } catch (e: any) {
+      console.warn(`Crypto chart fetch failed for ${sym}:`, e.message);
+    }
+  }
+
+  // 2. STOCKS & COMMODITIES VIA YAHOO FINANCE
+  const yahooSymbol = yahooSymbolMap[sym] || (sym.includes('.') ? sym : `${sym}.JK`);
+
+  try {
+    let period1: Date;
+    let interval: string = '1d';
+    const currentDate = new Date();
+
+    if (timeframe === '1D') {
+      period1 = new Date(currentDate.getTime() - 7 * 86400000);
+      interval = '15m';
+    } else if (timeframe === '1W') {
+      period1 = new Date(currentDate.getTime() - 8 * 86400000);
+      interval = '30m';
+    } else if (timeframe === '1M') {
+      period1 = new Date(currentDate.getTime() - 32 * 86400000);
+      interval = '1d';
+    } else if (timeframe === '3M') {
+      period1 = new Date(currentDate.getTime() - 95 * 86400000);
+      interval = '1d';
+    } else if (timeframe === 'YTD') {
+      period1 = new Date(currentDate.getFullYear(), 0, 1);
+      interval = '1d';
+    } else if (timeframe === '1Y') {
+      period1 = new Date(currentDate.getTime() - 370 * 86400000);
+      interval = '1d';
+    } else if (timeframe === '3Y') {
+      period1 = new Date(currentDate.getTime() - 3 * 365 * 86400000);
+      interval = '1wk';
+    } else if (timeframe === '5Y') {
+      period1 = new Date(currentDate.getTime() - 5 * 365 * 86400000);
+      interval = '1wk';
+    } else {
+      period1 = new Date(currentDate.getTime() - 32 * 86400000);
+      interval = '1d';
+    }
+
+    const chartRes = await yahooFinance.chart(yahooSymbol, { period1, interval: interval as any });
+    let quotes = (chartRes?.quotes || []).filter((q: any) => q.close != null && q.open != null);
+
+    if (timeframe === '1D' && quotes.length > 0) {
+      const lastDate = quotes[quotes.length - 1].date;
+      const lastDay = new Date(lastDate).toISOString().slice(0, 10);
+      const dayQuotes = quotes.filter((q: any) => new Date(q.date).toISOString().slice(0, 10) === lastDay);
+      if (dayQuotes.length >= 4) {
+        quotes = dayQuotes;
+      } else {
+        quotes = quotes.slice(-24);
+      }
+    }
+
+    if (quotes.length > 0) {
+      const candles: ChartCandle[] = quotes.map((q: any) => {
+        const dateObj = new Date(q.date);
+        let timeLabel = '';
+        if (timeframe === '1D') {
+          timeLabel = dateObj.toLocaleTimeString('id-ID', { timeZone: 'Asia/Jakarta', hour: '2-digit', minute: '2-digit' }).replace('.', ':');
+        } else if (timeframe === '1W') {
+          timeLabel = dateObj.toLocaleDateString('id-ID', { timeZone: 'Asia/Jakarta', day: '2-digit', month: 'short' }) + ' ' + dateObj.toLocaleTimeString('id-ID', { timeZone: 'Asia/Jakarta', hour: '2-digit', minute: '2-digit' }).replace('.', ':');
+        } else if (timeframe === '1M' || timeframe === '3M' || timeframe === 'YTD') {
+          timeLabel = dateObj.toLocaleDateString('id-ID', { timeZone: 'Asia/Jakarta', day: '2-digit', month: 'short' });
+        } else {
+          timeLabel = dateObj.toLocaleDateString('id-ID', { timeZone: 'Asia/Jakarta', month: 'short', year: '2-digit' });
+        }
+
+        const open = isIdr ? Math.round(q.open) : Number(q.open.toFixed(2));
+        const high = isIdr ? Math.round(q.high) : Number(q.high.toFixed(2));
+        const low = isIdr ? Math.round(q.low) : Number(q.low.toFixed(2));
+        const close = isIdr ? Math.round(q.close) : Number(q.close.toFixed(2));
+
+        return {
+          timestamp: dateObj.getTime(),
+          time: timeLabel,
+          open,
+          high,
+          low,
+          close,
+          value: close,
+          volume: q.volume || 0,
+          isUp: close >= open,
+          ma5: null,
+          ma20: null,
+          ma60: null
+        };
+      });
+
+      // Stitch active live market price as the latest point for 1D / 1W
+      if (liveMarketStates[sym]) {
+        const live = liveMarketStates[sym];
+        const last = candles[candles.length - 1];
+        if (last) {
+          last.close = live.currentPrice;
+          last.value = live.currentPrice;
+          if (live.currentPrice > last.high) last.high = live.currentPrice;
+          if (live.currentPrice < last.low) last.low = live.currentPrice;
+        }
+      }
+
+      // Calculate Moving Averages MA5, MA20, MA60
+      for (let i = 0; i < candles.length; i++) {
+        const calcMA = (period: number) => {
+          if (i < period - 1) return null;
+          let sum = 0;
+          for (let j = 0; j < period; j++) sum += candles[i - j].close;
+          return isIdr ? Math.round(sum / period) : Number((sum / period).toFixed(2));
+        };
+        candles[i].ma5 = calcMA(5);
+        candles[i].ma20 = calcMA(20);
+        candles[i].ma60 = calcMA(60);
+      }
+
+      const rawPrevClose = chartRes?.meta?.regularMarketPreviousClose || quotes[0].open || 1;
+      const prevCloseNum = Number(rawPrevClose);
+      const currentPrice = candles[candles.length - 1]?.close || quotes[quotes.length - 1].close;
+
+      const result = {
+        success: true,
+        symbol: sym,
+        timeframe,
+        currency: isIdr ? 'IDR' : 'USD',
+        currentPrice,
+        previousClose: isIdr ? Math.round(prevCloseNum) : Number(prevCloseNum.toFixed(2)),
+        candles,
+        high: Math.max(...candles.map((c: any) => c.high)),
+        low: Math.min(...candles.map((c: any) => c.low)),
+        updatedAt: now
+      };
+
+      chartDataCache[cacheKey] = { data: result, expiresAt: now + ttl };
+      return result;
+    }
+  } catch (err: any) {
+    console.warn(`Yahoo Finance chart fetch failed for ${sym}:`, err.message);
+  }
+
+  // 3. FALLBACK SYNTHETIC REAL-TIME CHART FROM LIVE MARKET STATE
+  const baseP = liveBasePrices[sym] || (isIdr ? 6350 : 100);
+  const state = getOrInitMarketState(sym, baseP, isIdr);
+  const times = ['09:00', '09:15', '09:30', '09:45', '10:00', '10:30', '11:00', '11:30', '13:30', '14:00', '14:30', '15:00', '15:30', '15:50'];
+  let simPrice = state.prevClose;
+
+  const fallbackCandles = times.map((t, idx) => {
+    const changePct = (Math.random() - 0.48) * 0.012;
+    const open = simPrice;
+    simPrice = isIdr ? Math.round(open * (1 + changePct)) : Number((open * (1 + changePct)).toFixed(2));
+    const close = idx === times.length - 1 ? state.currentPrice : simPrice;
+    const high = Math.max(open, close) + (isIdr ? Math.round(baseP * 0.005) : 0.5);
+    const low = Math.min(open, close) - (isIdr ? Math.round(baseP * 0.005) : 0.5);
+    return {
+      timestamp: now - (times.length - idx) * 15 * 60 * 1000,
+      time: t,
+      open,
+      high,
+      low,
+      close,
+      value: close,
+      volume: Math.floor(Math.random() * 500000) + 100000,
+      isUp: close >= open,
+      ma5: null,
+      ma20: null,
+      ma60: null
+    };
+  });
+
+  return {
+    success: true,
+    symbol: sym,
+    timeframe,
+    currency: isIdr ? 'IDR' : 'USD',
+    currentPrice: state.currentPrice,
+    previousClose: state.prevClose,
+    candles: fallbackCandles,
+    high: Math.max(...fallbackCandles.map(c => c.high)),
+    low: Math.min(...fallbackCandles.map(c => c.low)),
+    updatedAt: now
+  };
 }
 
 async function startServer() {
@@ -1045,6 +1566,18 @@ async function startServer() {
       }
 
       res.json({ success: true, quote });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // Dedicated Real-time & Historical Multi-Timeframe Chart Endpoint
+  app.get('/api/chart/:symbol', async (req, res) => {
+    try {
+      const sym = req.params.symbol.toUpperCase();
+      const timeframe = (req.query.timeframe as string) || '1D';
+      const chartData = await fetchChartData(sym, timeframe);
+      res.json(chartData);
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });
     }
@@ -1093,5 +1626,16 @@ async function startServer() {
     console.log(`Server running on http://localhost:${PORT}`);
   });
 }
+
+
+// Make sure on startup we populate everything
+setTimeout(async () => {
+  const allSymbols = Object.keys(yahooSymbolMap);
+  const chunkSize = 15;
+  for (let i = 0; i < allSymbols.length; i += chunkSize) {
+    const chunk = allSymbols.slice(i, i + chunkSize);
+    await fetchYahooQuotesBulk(chunk);
+  }
+}, 3000);
 
 startServer();

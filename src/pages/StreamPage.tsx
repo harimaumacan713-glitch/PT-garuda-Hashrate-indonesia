@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { 
   SquarePen, Bell, Search, SlidersHorizontal, ThumbsUp, ThumbsDown, 
   Share2, DollarSign, MessageSquare, MoreHorizontal, CheckCircle2,
-  TrendingUp, TrendingDown, X, Send, Heart, Flame, Smile, ArrowUpRight, Copy, Check
+  TrendingUp, TrendingDown, X, Send, Heart, Flame, Smile, ArrowUpRight, Copy, Check,
+  Target
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { CreatePostPage } from './CreatePostPage';
@@ -67,7 +68,6 @@ Hari ini Naik Tinggi, Besok bisa Koreksi.
 Menghadapi begini Paling aman,
 Saat koreksi diperhatikan untuk beli,
 Saat pasar overbought segera lakukan taking profit sebagian. Disiplin money management adalah kunci utama bertahan dalam dinamika bursa jangka panjang.`,
-    emojis: ['👍', '❤️', '👎'],
     totalReactions: 516,
     likes: 470,
     dislikes: 46,
@@ -83,7 +83,6 @@ Saat pasar overbought segera lakukan taking profit sebagian. Disiplin money mana
     text: `$IHSG $CUAN $DEWA`,
     tags: ['$IHSG', '$CUAN', '$DEWA'],
     mediaUrl: 'https://images.unsplash.com/photo-1590283603385-17ffb3a7f29f?auto=format&fit=crop&q=80&w=900',
-    emojis: ['👍', '😂', '🔥'],
     totalReactions: 127,
     likes: 127,
     dislikes: 0,
@@ -106,7 +105,6 @@ Yap , saya beri judul artikel nya
 tapi dengan catatan yah :
 
 => retail yang punya passion buat menjalani dunia keuangan.`,
-    emojis: ['👍', '❤️', '🔥'],
     totalReactions: 72,
     likes: 68,
     dislikes: 1,
@@ -514,7 +512,6 @@ export function StreamPage({ onOpenProfile }: { onOpenProfile?: () => void }) {
           id: key,
           time: value.time || 'Baru saja',
           isVerified: value.isVerified ?? true,
-          emojis: value.emojis || ['👍', '❤️', '🔥'],
           totalReactions: value.totalReactions || value.likes || 1,
           likes: value.likes || 0,
           dislikes: value.dislikes || 0,
@@ -979,16 +976,20 @@ export function StreamPage({ onOpenProfile }: { onOpenProfile?: () => void }) {
                         </div>
                       )}
 
-                      {/* Emoji Reactions Summary Row (e.g., 👍 💖 👎 516) */}
+                      {/* Clean Reaction Metric Row */}
                       <div className="flex items-center gap-1.5 mb-2.5 text-xs text-gray-500">
                         <div className="flex items-center -space-x-1">
-                          {post.emojis && post.emojis.map((emoji, idx) => (
-                            <span key={idx} className="text-sm">
-                              {emoji}
-                            </span>
-                          ))}
+                          <span className="w-5 h-5 rounded-full bg-emerald-50 text-[#00B26A] border border-emerald-200 flex items-center justify-center shadow-2xs">
+                            <ThumbsUp className="w-2.5 h-2.5 fill-[#00B26A]" />
+                          </span>
+                          <span className="w-5 h-5 rounded-full bg-rose-50 text-rose-500 border border-rose-200 flex items-center justify-center shadow-2xs">
+                            <Heart className="w-2.5 h-2.5 fill-rose-500" />
+                          </span>
+                          <span className="w-5 h-5 rounded-full bg-amber-50 text-amber-500 border border-amber-200 flex items-center justify-center shadow-2xs">
+                            <Flame className="w-2.5 h-2.5 fill-amber-500" />
+                          </span>
                         </div>
-                        <span className="text-xs font-medium text-gray-500 ml-1">
+                        <span className="text-xs font-semibold text-gray-500 ml-1">
                           {post.totalReactions || post.likes || 0}
                         </span>
                       </div>
@@ -1410,8 +1411,9 @@ export function StreamPage({ onOpenProfile }: { onOpenProfile?: () => void }) {
 
                         {/* Target Price highlight if available */}
                         {item.targetPrice && (
-                          <div className="inline-block px-2.5 py-1 rounded-lg bg-emerald-50 text-[#00B26A] text-[11px] font-bold border border-emerald-200/80 mb-2">
-                            🎯 {item.targetPrice}
+                          <div className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg bg-emerald-50 text-[#00B26A] text-[11px] font-bold border border-emerald-200/80 mb-2">
+                            <Target className="w-3 h-3 text-[#00B26A]" />
+                            <span>Target: {item.targetPrice}</span>
                           </div>
                         )}
 

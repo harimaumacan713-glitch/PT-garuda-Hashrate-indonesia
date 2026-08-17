@@ -86,10 +86,10 @@ export function CreatePostPage({
   };
 
   const sampleGifs = [
-    { name: 'To The Moon 🚀', url: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&q=80&w=400' },
-    { name: 'Bull Market 🐂', url: 'https://images.unsplash.com/photo-1590283603385-17ffb3a7f29f?auto=format&fit=crop&q=80&w=400' },
-    { name: 'HODL 💎🙌', url: 'https://images.unsplash.com/photo-1622979135225-d2ba269bc1df?auto=format&fit=crop&q=80&w=400' },
-    { name: 'Buy The Dip 📉', url: 'https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?auto=format&fit=crop&q=80&w=400' }
+    { name: 'To The Moon', url: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&q=80&w=400' },
+    { name: 'Bull Market', url: 'https://images.unsplash.com/photo-1590283603385-17ffb3a7f29f?auto=format&fit=crop&q=80&w=400' },
+    { name: 'HODL Momentum', url: 'https://images.unsplash.com/photo-1622979135225-d2ba269bc1df?auto=format&fit=crop&q=80&w=400' },
+    { name: 'Buy The Dip', url: 'https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?auto=format&fit=crop&q=80&w=400' }
   ];
 
   const handlePost = async () => {

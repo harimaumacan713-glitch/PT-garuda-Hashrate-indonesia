@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  ChevronLeft, ChevronDown, Info, Check, Share2 
+  ChevronLeft, ChevronDown, Info, Check, Share2, Zap 
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useAuth } from '../contexts/AuthContext';
@@ -514,8 +514,9 @@ export function BuyOrderPage({ symbol = 'BBCA', onBack, onOrderSuccess }: BuyOrd
               <div>
                 <div className="flex items-center gap-1.5 flex-wrap">
                   <h1 className="text-[16px] font-extrabold text-gray-900 leading-tight">{baseSymbol}</h1>
-                  <span className="flex items-center gap-0.5 bg-[#EDE9FE] text-[#7C3AED] text-[10px] font-bold px-1.5 py-0.5 rounded leading-none">
-                    ⚡ 5x
+                  <span className="flex items-center gap-1 bg-[#EDE9FE] text-[#7C3AED] text-[10px] font-bold px-1.5 py-0.5 rounded leading-none">
+                    <Zap className="w-2.5 h-2.5 fill-[#7C3AED]" />
+                    <span>5x</span>
                   </span>
                   <span className="border border-[#00B26A] text-[#00B26A] bg-[#ECFDF5] text-[10px] font-bold px-1.5 py-0.5 rounded leading-none">
                     TL
@@ -565,7 +566,8 @@ export function BuyOrderPage({ symbol = 'BBCA', onBack, onOrderSuccess }: BuyOrd
                     : "border-gray-200 text-gray-500 bg-white hover:bg-gray-50"
                 )}
               >
-                <span>⚡ 5x Day Trade</span>
+                <Zap className="w-3 h-3 text-[#00B26A]" />
+                <span>5x Day Trade</span>
                 <ChevronDown className="w-3 h-3 text-gray-400" />
               </button>
             </div>

@@ -18,6 +18,11 @@ export function AssetLogo({
   fallbackText
 }: AssetLogoProps) {
   const [hasError, setHasError] = useState(false);
+  
+  React.useEffect(() => {
+    setHasError(false);
+  }, [symbol]);
+
   const logoUrl = getAssetLogo(symbol);
   const cleanSymbol = (symbol || '').toUpperCase().replace('USDT', '');
   const brandColor = getAssetBrandColor(cleanSymbol);
