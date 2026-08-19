@@ -20,6 +20,7 @@ import { RefreshCw, Sparkles, Filter, Bookmark, ExternalLink } from 'lucide-reac
 type PostItem = {
   id: string;
   author: string;
+  authorName?: string;
   authorUid?: string;
   username?: string;
   avatar?: string;
@@ -228,7 +229,7 @@ const DEFAULT_LIVE_RESEARCH: ResearchItem[] = [
     id: 'res_init_1',
     title: 'Unboxing Big 4 Bank: Likuiditas Ketat & Strategi Pertumbuhan Kredit Berkualitas',
     subtitle: 'Analisis Performa NIM, CASA, dan Prospek Dividen BBCA, BBRI, BMRI, BBNI',
-    author: 'Stockbit Research • Banking Sector',
+    author: 'BrusaSCS Research • Banking Sector',
     date: 'Hari ini',
     category: 'Unboxing',
     rating: 'OVERWEIGHT',
@@ -336,7 +337,9 @@ export function StreamPage({ onOpenProfile }: { onOpenProfile?: () => void }) {
   const { unreadCount } = useNotification();
   const activeUid = user ? user.uid : 'demo_user';
   const defaultUsername = user?.email ? user.email.split('@')[0] : 'investor_user';
-  const [currentUsername, setCurrentUsername] = useState(defaultUsername);
+  const isDewangga = user?.email?.toLowerCase().includes('dewanggamiliarder');
+  const [currentUsername, setCurrentUsername] = useState(isDewangga ? 'BrusaSekuritas' : defaultUsername);
+  const [currentDisplayName, setCurrentDisplayName] = useState(isDewangga ? 'Brusa Sekuritas' : (user?.displayName || defaultUsername));
   const [userAvatarId, setUserAvatarId] = useState('cat_glasses');
   const [userCustomPhotoUrl, setUserCustomPhotoUrl] = useState<string | null>(null);
 
@@ -355,6 +358,7 @@ export function StreamPage({ onOpenProfile }: { onOpenProfile?: () => void }) {
   const [tipSuccess, setTipSuccess] = useState(false);
   const [copiedToast, setCopiedToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('Tautan stream berhasil disalin');
+  const [selectedImagePreview, setSelectedImagePreview] = useState<string | null>(null);
 
   // Dynamic Live News & Research states with immediate rich defaults
   const [liveNews, setLiveNews] = useState<NewsItem[]>(DEFAULT_LIVE_NEWS);
@@ -470,7 +474,7 @@ export function StreamPage({ onOpenProfile }: { onOpenProfile?: () => void }) {
 
   const handleShareNews = (item: NewsItem, e: React.MouseEvent) => {
     e.stopPropagation();
-    navigator.clipboard?.writeText?.(item.url || `https://stockbit.com/news/${item.id}`);
+    navigator.clipboard?.writeText?.(item.url || `https://brusascs.com/news/${item.id}`);
     setToastMessage('Tautan berita berhasil disalin');
     setCopiedToast(true);
     setTimeout(() => setCopiedToast(false), 2500);
@@ -478,7 +482,7 @@ export function StreamPage({ onOpenProfile }: { onOpenProfile?: () => void }) {
 
   const handleShareResearch = (item: ResearchItem, e: React.MouseEvent) => {
     e.stopPropagation();
-    navigator.clipboard?.writeText?.(`https://stockbit.com/research/${item.id}`);
+    navigator.clipboard?.writeText?.(`https://brusascs.com/research/${item.id}`);
     setToastMessage('Tautan laporan riset berhasil disalin');
     setCopiedToast(true);
     setTimeout(() => setCopiedToast(false), 2500);
@@ -490,6 +494,7 @@ export function StreamPage({ onOpenProfile }: { onOpenProfile?: () => void }) {
     const unsubscribeProfile = onValue(profileRef, (snapshot) => {
       if (snapshot.exists()) {
         const data = snapshot.val();
+        if (data.displayName) setCurrentDisplayName(data.displayName);
         if (data.username) setCurrentUsername(data.username);
         else if (data.displayName) setCurrentUsername(data.displayName.replace(/\s+/g, '_').toLowerCase());
         if (data.avatarId) setUserAvatarId(data.avatarId);
@@ -507,16 +512,47 @@ export function StreamPage({ onOpenProfile }: { onOpenProfile?: () => void }) {
     const unsubscribe = onValue(postsRef, (snapshot) => {
       if (snapshot.exists()) {
         const data = snapshot.val();
-        const firebaseList: PostItem[] = Object.entries(data).map(([key, value]: [string, any]) => ({
-          ...value,
-          id: key,
-          time: value.time || 'Baru saja',
-          isVerified: value.isVerified ?? true,
-          totalReactions: value.totalReactions || value.likes || 1,
-          likes: value.likes || 0,
-          dislikes: value.dislikes || 0,
-          comments: value.comments || 0
-        })).sort((a: any, b: any) => (b.createdAt || 0) - (a.createdAt || 0));
+        const firebaseList: PostItem[] = Object.entries(data).map(([key, value]: [string, any]) => {
+          let displayTime = value.time;
+          if (value.createdAt && typeof value.createdAt === 'number') {
+            const d = new Date(value.createdAt);
+            displayTime = d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: '2-digit' }) + ', ' + 
+                          d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace('.', ':');
+          } else if (!displayTime || displayTime === 'Baru saja') {
+            const now = new Date();
+            displayTime = now.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: '2-digit' }) + ', ' + 
+                          now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace('.', ':');
+          }
+
+          const isCurrentAuthor = (value.authorUid && value.authorUid === activeUid) ||
+            (value.author && currentUsername && value.author.toLowerCase() === currentUsername.toLowerCase()) ||
+            (activeUid === 'dewanggamiliarder' && (value.author === 'dewanggamiliarder' || value.author === 'BrusaSekuritas'));
+
+          const author = isCurrentAuthor && currentUsername ? currentUsername : (value.author || 'BrusaSekuritas');
+          const authorName = isCurrentAuthor && currentDisplayName ? currentDisplayName : (value.authorName || value.displayName || (author === 'BrusaSekuritas' ? 'Brusa Sekuritas' : author));
+          const avatarId = isCurrentAuthor && userAvatarId ? userAvatarId : value.avatarId;
+          const photoUrl = isCurrentAuthor && userCustomPhotoUrl !== undefined ? userCustomPhotoUrl : value.photoUrl;
+
+          return {
+            ...value,
+            id: key,
+            author,
+            authorName,
+            avatarId,
+            photoUrl,
+            time: displayTime,
+            isVerified: value.isVerified ?? (
+              author?.toLowerCase() === 'brusasekuritas' ||
+              author?.toLowerCase() === 'bursasekuritas' ||
+              author?.toLowerCase() === 'dewanggamiliarder' ||
+              (authorName && authorName.toLowerCase().includes('brusa'))
+            ),
+            totalReactions: value.totalReactions || value.likes || 1,
+            likes: value.likes || 0,
+            dislikes: value.dislikes || 0,
+            comments: value.comments || 0
+          };
+        }).sort((a: any, b: any) => (b.createdAt || 0) - (a.createdAt || 0));
 
         // Combine Firebase posts with default realistic posts
         setStreamPosts([...firebaseList, ...DEFAULT_COMMUNITY_POSTS]);
@@ -611,7 +647,7 @@ export function StreamPage({ onOpenProfile }: { onOpenProfile?: () => void }) {
   };
 
   const handleSharePost = (post: PostItem) => {
-    navigator.clipboard?.writeText?.(`https://stockbit.com/post/${post.id}`);
+    navigator.clipboard?.writeText?.(`https://brusascs.com/post/${post.id}`);
     setCopiedToast(true);
     setTimeout(() => setCopiedToast(false), 2500);
   };
@@ -700,12 +736,12 @@ export function StreamPage({ onOpenProfile }: { onOpenProfile?: () => void }) {
           </span>
         </button>
 
-        {/* Center: Stockbit Official Wordmark / Logo */}
+        {/* Center: BrusaSCS Official Wordmark / Logo */}
         <div className="flex items-center gap-1">
           <div className="flex items-baseline">
-            <span className="text-lg font-bold tracking-tight text-gray-900">Stock</span>
-            <span className="text-lg font-bold tracking-tight text-gray-900 relative">
-              bit
+            <span className="text-lg font-black tracking-tight text-gray-900">Brusa</span>
+            <span className="text-lg font-black tracking-tight text-[#00B26A] relative">
+              SCS
               <svg className="w-3 h-3 text-[#00B26A] inline-block ml-0.5 -mt-2.5" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M3 17h3v4H3v-4zm6-6h3v10H9V11zm6-6h3v16h-3V5zm6 4h3v12h-3V9z"/>
               </svg>
@@ -835,7 +871,7 @@ export function StreamPage({ onOpenProfile }: { onOpenProfile?: () => void }) {
             {/* Stream Feed Posts */}
             <div className="divide-y divide-gray-100">
               {filteredPosts.length > 0 ? (
-                filteredPosts.map((post) => {
+                filteredPosts.map((post, idx) => {
                   const isExpanded = expandedPosts[post.id];
                   const isLiked = likedPosts[post.id];
                   const isDisliked = dislikedPosts[post.id];
@@ -843,7 +879,7 @@ export function StreamPage({ onOpenProfile }: { onOpenProfile?: () => void }) {
                   const shouldTruncate = textLength > 280 && !isExpanded;
 
                   return (
-                    <article key={post.id} className="p-4 bg-white hover:bg-gray-50/40 transition-colors">
+                    <article key={`post-${post.id}-${idx}`} className="p-4 bg-white hover:bg-gray-50/40 transition-colors">
                       {/* Post Header: Avatar, Name, Verified Badge, Time, Menu */}
                       <div className="flex items-start justify-between mb-2">
                         <div className="flex items-center gap-3">
@@ -863,15 +899,26 @@ export function StreamPage({ onOpenProfile }: { onOpenProfile?: () => void }) {
                             </div>
                           )}
                           <div>
-                            <div className="flex items-center gap-1.5">
+                            <div className="flex items-center gap-1.5 flex-wrap">
                               <span className="text-[13.5px] font-bold text-gray-900 hover:underline cursor-pointer">
-                                {post.author}
+                                {post.authorName || (post.author === 'BrusaSekuritas' ? 'Brusa Sekuritas' : post.author)}
                               </span>
-                              {post.isVerified && (
-                                <svg className="w-3.5 h-3.5 text-gray-400 fill-current" viewBox="0 0 24 24">
-                                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
-                                </svg>
+                              {(post.isVerified || 
+                                post.author?.toLowerCase() === 'brusasekuritas' || 
+                                post.author?.toLowerCase() === 'bursasekuritas' || 
+                                post.author?.toLowerCase() === 'dewanggamiliarder' || 
+                                (post.authorName && post.authorName.toLowerCase().includes('brusa')) ||
+                                post.author?.toLowerCase().includes('dewanggamiliarder')) && (
+                                <span title="Akun Resmi Terverifikasi (Centang Biru)">
+                                  <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 inline-block shrink-0" fill="none">
+                                    <path d="M22.25 12c0-1.43-.88-2.67-2.19-3.34.46-1.39.2-2.9-.81-3.91s-2.52-1.27-3.91-.81c-.67-1.31-1.91-2.19-3.34-2.19s-2.67.88-3.34 2.19c-1.39-.46-2.9-.2-3.91.81s-1.27 2.52-.81 3.91c-1.31.67-2.19 1.91-2.19 3.34s.88 2.67 2.19 3.34c-.46 1.39-.2 2.9.81 3.91s2.52 1.27 3.91.81c.67 1.31 1.91 2.19 3.34 2.19s2.67-.88 3.34-2.19c1.39.46 2.9.2 3.91-.81s1.27-2.52.81-3.91c1.31-.67 2.19-1.91 2.19-3.34z" fill="#1D9BF0"/>
+                                    <polygon points="9.5,14.8 6.7,12 7.7,11 9.5,12.8 14.8,7.5 15.8,8.5" fill="#FFFFFF"/>
+                                  </svg>
+                                </span>
                               )}
+                              <span className="text-xs text-gray-500 font-medium">
+                                @{post.author}
+                              </span>
                               {post.sentiment && (
                                 <span className={cn(
                                   "text-[10px] font-bold px-1.5 py-0.5 rounded flex items-center gap-0.5 ml-1",
@@ -949,14 +996,22 @@ export function StreamPage({ onOpenProfile }: { onOpenProfile?: () => void }) {
                         </div>
                       )}
 
-                      {/* Media Image Attachment (Full width or Rounded) */}
+                      {/* Media Image Attachment (Follows original aspect ratio & dimensions) */}
                       {post.mediaUrl && (
-                        <div className="mb-3 rounded-lg overflow-hidden border border-gray-100 bg-black/5">
+                        <div 
+                          onClick={() => setSelectedImagePreview(post.mediaUrl)}
+                          className="mb-3 rounded-2xl overflow-hidden border border-gray-100 bg-gray-50/70 shadow-2xs hover:opacity-95 transition-opacity cursor-pointer group/img relative"
+                          title="Klik untuk melihat foto ukuran penuh"
+                        >
                           <img 
                             src={post.mediaUrl} 
                             alt="Stream attachment" 
-                            className="w-full object-cover max-h-[380px]" 
+                            className="w-full h-auto max-h-[650px] object-contain mx-auto block rounded-2xl" 
+                            loading="lazy"
                           />
+                          <div className="absolute bottom-2 right-2 px-2 py-1 bg-black/60 text-white rounded-lg text-[10px] font-bold opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center gap-1 backdrop-blur-xs">
+                            <span>Buka Foto Penuh</span>
+                          </div>
                         </div>
                       )}
 
@@ -1152,13 +1207,13 @@ export function StreamPage({ onOpenProfile }: { onOpenProfile?: () => void }) {
                 ))}
               </div>
             ) : filteredNews.length > 0 ? (
-              filteredNews.map((item) => {
+              filteredNews.map((item, idx) => {
                 const isLiked = likedNews[item.id];
                 const isDisliked = dislikedNews[item.id];
 
                 return (
                   <div
-                    key={item.id}
+                    key={`news-${item.id}-${idx}`}
                     onClick={() => setSelectedNews(item)}
                     className="p-4 bg-white hover:bg-emerald-50/20 transition-all cursor-pointer group"
                   >
@@ -1372,9 +1427,9 @@ export function StreamPage({ onOpenProfile }: { onOpenProfile?: () => void }) {
               </div>
             ) : filteredResearch.length > 0 ? (
               <div className="divide-y divide-gray-100">
-                {filteredResearch.map((item) => (
+                {filteredResearch.map((item, idx) => (
                   <div
-                    key={item.id}
+                    key={`res-${item.id}-${idx}`}
                     onClick={() => setSelectedResearch(item)}
                     className="p-4 bg-white hover:bg-emerald-50/20 transition-all cursor-pointer group"
                   >
@@ -1476,7 +1531,19 @@ export function StreamPage({ onOpenProfile }: { onOpenProfile?: () => void }) {
             <div className="p-4 border-b border-gray-100 flex items-center justify-between">
               <div>
                 <h3 className="text-sm font-bold text-gray-900">Komentar</h3>
-                <p className="text-[11px] text-gray-500">Postingan oleh @{activeCommentPost.author}</p>
+                <div className="flex items-center gap-1 mt-0.5">
+                  <p className="text-[11px] text-gray-500">Postingan oleh @{activeCommentPost.author}</p>
+                  {(activeCommentPost.isVerified || 
+                    activeCommentPost.author?.toLowerCase() === 'brusasekuritas' || 
+                    activeCommentPost.author?.toLowerCase() === 'bursasekuritas' || 
+                    activeCommentPost.author?.toLowerCase() === 'dewanggamiliarder' || 
+                    activeCommentPost.author?.toLowerCase().includes('dewanggamiliarder')) && (
+                    <svg viewBox="0 0 24 24" className="w-3 h-3 inline-block shrink-0" fill="none">
+                      <path d="M22.25 12c0-1.43-.88-2.67-2.19-3.34.46-1.39.2-2.9-.81-3.91s-2.52-1.27-3.91-.81c-.67-1.31-1.91-2.19-3.34-2.19s-2.67.88-3.34 2.19c-1.39-.46-2.9-.2-3.91.81s-1.27 2.52-.81 3.91c-1.31.67-2.19 1.91-2.19 3.34s.88 2.67 2.19 3.34c-.46 1.39-.2 2.9.81 3.91s2.52 1.27 3.91.81c.67 1.31 1.91 2.19 3.34 2.19s2.67-.88 3.34-2.19c1.39.46 2.9.2 3.91-.81s1.27-2.52.81-3.91c1.31-.67 2.19-1.91 2.19-3.34z" fill="#1D9BF0"/>
+                      <polygon points="9.5,14.8 6.7,12 7.7,11 9.5,12.8 14.8,7.5 15.8,8.5" fill="#FFFFFF"/>
+                    </svg>
+                  )}
+                </div>
               </div>
               <button 
                 onClick={() => setActiveCommentPost(null)}
@@ -1488,14 +1555,25 @@ export function StreamPage({ onOpenProfile }: { onOpenProfile?: () => void }) {
 
             <div className="flex-1 overflow-y-auto p-4 space-y-3 min-h-[160px] max-h-[50vh]">
               {activeCommentPost.commentsList && activeCommentPost.commentsList.length > 0 ? (
-                activeCommentPost.commentsList.map((comm) => (
-                  <div key={comm.id} className="flex gap-2.5 items-start">
+                activeCommentPost.commentsList.map((comm, idx) => (
+                  <div key={`comm-${comm.id || idx}-${idx}`} className="flex gap-2.5 items-start">
                     <div className="w-8 h-8 rounded-full bg-blue-50 border border-blue-100 flex items-center justify-center shrink-0 font-bold text-xs text-blue-600">
                       {comm.user.charAt(0)}
                     </div>
                     <div className="flex-1 bg-gray-50 rounded-xl p-3 border border-gray-100">
                       <div className="flex items-center justify-between mb-1">
-                        <span className="text-xs font-bold text-gray-900">{comm.user}</span>
+                        <div className="flex items-center gap-1">
+                          <span className="text-xs font-bold text-gray-900">@{comm.user}</span>
+                          {(comm.user.toLowerCase() === 'brusasekuritas' ||
+                            comm.user.toLowerCase() === 'bursasekuritas' ||
+                            comm.user.toLowerCase() === 'dewanggamiliarder' ||
+                            comm.user.toLowerCase().includes('dewanggamiliarder')) && (
+                            <svg viewBox="0 0 24 24" className="w-3 h-3 inline-block shrink-0" fill="none">
+                              <path d="M22.25 12c0-1.43-.88-2.67-2.19-3.34.46-1.39.2-2.9-.81-3.91s-2.52-1.27-3.91-.81c-.67-1.31-1.91-2.19-3.34-2.19s-2.67.88-3.34 2.19c-1.39-.46-2.9-.2-3.91.81s-1.27 2.52-.81 3.91c-1.31.67-2.19 1.91-2.19 3.34s.88 2.67 2.19 3.34c-.46 1.39-.2 2.9.81 3.91s2.52 1.27 3.91.81c.67 1.31 1.91 2.19 3.34 2.19s2.67-.88 3.34-2.19c1.39.46 2.9.2 3.91-.81s1.27-2.52.81-3.91c1.31-.67 2.19-1.91 2.19-3.34z" fill="#1D9BF0"/>
+                              <polygon points="9.5,14.8 6.7,12 7.7,11 9.5,12.8 14.8,7.5 15.8,8.5" fill="#FFFFFF"/>
+                            </svg>
+                          )}
+                        </div>
                         <span className="text-[10px] text-gray-400">{comm.time}</span>
                       </div>
                       <p className="text-xs text-gray-700 leading-relaxed">{comm.text}</p>
@@ -1605,6 +1683,30 @@ export function StreamPage({ onOpenProfile }: { onOpenProfile?: () => void }) {
         research={selectedResearch}
         onClose={() => setSelectedResearch(null)}
       />
+
+      {/* FULLSCREEN IMAGE LIGHTBOX MODAL */}
+      {selectedImagePreview && (
+        <div 
+          onClick={() => setSelectedImagePreview(null)}
+          className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center p-3 animate-in fade-in duration-200"
+        >
+          <div className="relative max-w-5xl w-full max-h-[96vh] flex items-center justify-center">
+            <button
+              onClick={() => setSelectedImagePreview(null)}
+              className="absolute top-2 right-2 p-2 bg-black/70 hover:bg-black text-white rounded-full transition-all cursor-pointer z-20 shadow-lg active:scale-95"
+              title="Tutup"
+            >
+              <X className="w-6 h-6" />
+            </button>
+            <img 
+              src={selectedImagePreview} 
+              alt="Fullscreen Preview" 
+              className="max-w-full max-h-[92vh] object-contain rounded-2xl shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

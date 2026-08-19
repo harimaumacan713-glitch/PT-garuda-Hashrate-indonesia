@@ -50,13 +50,13 @@ export function NotificationModal({
               </p>
             </div>
           ) : (
-            notifications.map((notif) => {
+            notifications.map((notif, idx) => {
               const isWithdraw = notif.type === 'withdraw';
               const isDeposit = notif.type === 'deposit';
 
               return (
                 <div
-                  key={notif.id}
+                  key={`notif-${notif.id || idx}-${idx}`}
                   className="p-3.5 bg-gray-50/80 hover:bg-emerald-50/40 rounded-xl border border-gray-100 transition-colors flex items-start gap-3"
                 >
                   <div className="shrink-0 mt-0.5">

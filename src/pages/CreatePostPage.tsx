@@ -32,8 +32,9 @@ export function CreatePostPage({
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Profile data
-  const defaultDisplayName = user?.displayName || (user?.email ? user.email.split('@')[0] : 'Investor');
-  const defaultUsername = user?.email ? user.email.split('@')[0] : 'investor_user';
+  const isDewanggaUser = user?.email?.toLowerCase().includes('dewanggamiliarder');
+  const defaultDisplayName = isDewanggaUser ? 'Brusa Sekuritas' : (user?.displayName || (user?.email ? user.email.split('@')[0] : 'Investor'));
+  const defaultUsername = isDewanggaUser ? 'BrusaSekuritas' : (user?.email ? user.email.split('@')[0] : 'investor_user');
   const [username, setUsername] = useState(defaultUsername);
   const [displayName, setDisplayName] = useState(defaultDisplayName);
   const [avatarId, setAvatarId] = useState('cat_glasses');
@@ -97,6 +98,13 @@ export function CreatePostPage({
 
     setIsSubmitting(true);
     try {
+      const isDewangga = 
+        username?.toLowerCase() === 'brusasekuritas' ||
+        username?.toLowerCase() === 'bursasekuritas' ||
+        username?.toLowerCase() === 'dewanggamiliarder' || 
+        user?.email?.startsWith('dewanggamiliarder') || 
+        activeUid === 'dewanggamiliarder';
+
       const newPost = {
         author: username || defaultUsername,
         authorName: displayName || defaultDisplayName,
@@ -104,6 +112,7 @@ export function CreatePostPage({
         avatar: customPhotoUrl || avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${username || defaultUsername}&backgroundColor=b6e3f4`,
         avatarId: avatarId || 'cat_glasses',
         photoUrl: customPhotoUrl || null,
+        isVerified: isDewangga,
         text: text.trim(),
         audience,
         sentiment: sentiment || null,
@@ -113,7 +122,7 @@ export function CreatePostPage({
           options: pollOptions.filter(o => o.trim().length > 0).map(text => ({ text, votes: 0 })),
           totalVotes: 0
         } : null,
-        time: 'Baru saja',
+        time: new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: '2-digit' }) + ', ' + new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace('.', ':'),
         createdAt: Date.now(),
         likes: 0,
         dislikes: 0,
@@ -203,9 +212,17 @@ export function CreatePostPage({
           <UserProfileAvatar avatarId={avatarId} customPhotoUrl={customPhotoUrl} size="md" />
 
           <div className="flex flex-col items-start">
-            <span className="text-[14px] font-bold text-gray-900 leading-tight">
-              {username}
-            </span>
+            <div className="flex items-center gap-1.5">
+              <span className="text-[14px] font-bold text-gray-900 leading-tight">
+                {username}
+              </span>
+              {(username?.toLowerCase() === 'dewanggamiliarder' || username?.toLowerCase() === 'brusasekuritas' || username?.toLowerCase() === 'bursasekuritas' || user?.email?.startsWith('dewanggamiliarder')) && (
+                <svg viewBox="0 0 24 24" className="w-4 h-4 text-[#1D9BF0] fill-current inline-block shrink-0" aria-label="Verified">
+                  <path d="M22.25 12c0-1.43-.88-2.67-2.19-3.34.46-1.39.2-2.9-.81-3.91s-2.52-1.27-3.91-.81c-.67-1.31-1.91-2.19-3.34-2.19s-2.67.88-3.34 2.19c-1.39-.46-2.9-.2-3.91.81s-1.27 2.52-.81 3.91c-1.31.67-2.19 1.91-2.19 3.34s.88 2.67 2.19 3.34c-.46 1.39-.2 2.9.81 3.91s2.52 1.27 3.91.81c.67 1.31 1.91 2.19 3.34 2.19s2.67-.88 3.34-2.19c1.39.46 2.9.2 3.91-.81s1.27-2.52.81-3.91c1.31-.67 2.19-1.91 2.19-3.34z" fill="#1D9BF0"/>
+                  <polygon points="9.5,14.8 6.7,12 7.7,11 9.5,12.8 14.8,7.5 15.8,8.5" fill="#FFFFFF"/>
+                </svg>
+              )}
+            </div>
 
             {/* Audience Dropdown Button */}
             <div className="relative mt-1">
@@ -288,15 +305,20 @@ export function CreatePostPage({
           </div>
         )}
 
-        {/* Attached Image Preview */}
+        {/* Attached Image Preview - Preserves User's Natural Image Dimensions */}
         {attachedImage && (
-          <div className="relative mb-4 rounded-xl overflow-hidden border border-gray-200 max-h-64 bg-gray-50 flex items-center justify-center">
-            <img src={attachedImage} alt="Attachment" className="w-full h-full object-contain" />
+          <div className="relative mb-4 rounded-2xl overflow-hidden border border-gray-200 bg-gray-50/50 shadow-xs">
+            <img 
+              src={attachedImage} 
+              alt="Attachment" 
+              className="w-full h-auto max-h-[500px] object-contain rounded-2xl mx-auto block" 
+            />
             <button 
               onClick={() => setAttachedImage(null)}
-              className="absolute top-2 right-2 p-1.5 bg-black/60 hover:bg-black/80 text-white rounded-full transition-colors"
+              className="absolute top-3 right-3 p-1.5 bg-black/70 hover:bg-black text-white rounded-full transition-all shadow-md active:scale-95 cursor-pointer z-10"
+              title="Hapus Gambar"
             >
-              <X className="w-4 h-4" />
+              <X className="w-4 h-4" strokeWidth={2.5} />
             </button>
           </div>
         )}

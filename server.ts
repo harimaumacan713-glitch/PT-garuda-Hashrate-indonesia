@@ -1,5 +1,6 @@
 import express from "express";
 import path from "path";
+import fs from "fs";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 import YahooFinance from "yahoo-finance2";
@@ -76,6 +77,8 @@ const yahooSymbolMap: Record<string, string> = {
   'WIRG': 'WIRG.JK',
   'DMMX': 'DMMX.JK',
   'LABA': 'LABA.JK',
+  'DEWA': 'DEWA.JK',
+  'BUMI': 'BUMI.JK',
 
   // US Stocks
   'NVDA': 'NVDA',
@@ -178,6 +181,7 @@ const liveBasePrices: Record<string, number> = {
   'SMRA': 330, 'GIAA': 76, 'ASSA': 630, 'BIRD': 1630, 'TMAS': 127,
   'SMDR': 302, 'GOTO': 50, 'BUKA': 115, 'EMTK': 505, 'WIRG': 64,
   'DMMX': 185, 'LABA': 93, 'SMGR': 1580, 'AMMN': 4270, 'ANTM': 3070,
+  'DEWA': 420, 'BUMI': 181,
 
   // US Stocks & Commodities
   'NVDA': 227.40, 'AAPL': 303.34, 'TSLA': 340.46, 'MSFT': 484.87, 'AMZN': 261.17,
@@ -898,7 +902,7 @@ const dynamicResearchPool = [
   {
     title: 'Unboxing Big 4 Bank: Likuiditas Ketat & Strategi Pertumbuhan Kredit Berkualitas',
     subtitle: 'Analisis Performa NIM, CASA, dan Prospek Dividen BBCA, BBRI, BMRI, BBNI',
-    author: 'Stockbit Research • Banking Sector',
+    author: 'BrusaSCS Research • Banking Sector',
     category: 'Unboxing',
     rating: 'OVERWEIGHT',
     targetPrice: 'BBRI Rp 5.900 (+21%) | BBCA Rp 11.200 (+14%)',
@@ -958,7 +962,7 @@ const dynamicResearchPool = [
   {
     title: 'Sektor Energi Terbarukan (EBT): Prospek Pertumbuhan Panas Bumi & Dekarbonisasi',
     subtitle: 'Membedah Valuasi BREN & PGEO dalam Roadmap Transisi Energi Nasional',
-    author: 'Stockbit Research • Renewable Energy',
+    author: 'BrusaSCS Research • Renewable Energy',
     category: 'Sectoral Outlook',
     rating: 'ACCUMULATE',
     targetPrice: 'BREN Rp 9.800 | PGEO Rp 1.450',
@@ -1064,7 +1068,7 @@ async function getLiveIndonesianNews(force = false): Promise<any[]> {
   }
 
   try {
-    const prompt = `Bertindaklah sebagai feed aggregator berita pasar modal dan bursa saham Indonesia (BEI/IDX) untuk aplikasi Stockbit.
+    const prompt = `Bertindaklah sebagai feed aggregator berita pasar modal dan bursa saham Indonesia (BEI/IDX) untuk aplikasi BrusaSCS.
 Berikan 8 berita pasar saham Indonesia (IHSG, emiten bluechip/second liner, perbankan, komoditas, aksi korporasi, dividen, dan makroekonomi) paling terkini, aktual, dan faktual hari ini.
 
 Keluarkan HANYA JSON array dengan format berikut tanpa teks pembuka/penutup:
@@ -1140,7 +1144,7 @@ async function getLiveIndonesianResearch(force = false): Promise<any[]> {
   }
 
   try {
-    const prompt = `Bertindaklah sebagai Tim Equity Research & Macro Analyst Stockbit Indonesia (Garuda Inves Research).
+    const prompt = `Bertindaklah sebagai Tim Equity Research & Macro Analyst BrusaSCS Indonesia (Garuda Inves Research).
 Buatlah 6 laporan riset dan analisis mendalam (Sector Outlook, Unboxing Saham, Dividend Strategy, Macroeconomic Note) paling aktual dan berkualitas tinggi untuk investor saham BEI.
 
 Keluarkan HANYA JSON array dengan struktur berikut tanpa teks lain:
@@ -1149,7 +1153,7 @@ Keluarkan HANYA JSON array dengan struktur berikut tanpa teks lain:
     "id": "research_1",
     "title": "Judul Laporan Riset Mendalam",
     "subtitle": "Subjudul / Tema Analisis",
-    "author": "Stockbit Research Team / Senior Equity Analyst",
+    "author": "BrusaSCS Research Team / Senior Equity Analyst",
     "date": "15 Agu 2026",
     "category": "Unboxing" | "Sectoral Outlook" | "Macro" | "Snips" | "Dividend Strategy",
     "rating": "BUY" | "OVERWEIGHT" | "HOLD" | "NEUTRAL",
@@ -1533,7 +1537,7 @@ async function fetchChartData(symbol: string, timeframe: string = '1D'): Promise
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
   app.use(express.json());
 
@@ -1614,6 +1618,17 @@ async function startServer() {
       appType: "spa",
     });
     app.use(vite.middlewares);
+    app.use('*', async (req, res, next) => {
+      const url = req.originalUrl;
+      try {
+        let template = fs.readFileSync(path.resolve(process.cwd(), 'index.html'), 'utf-8');
+        template = await vite.transformIndexHtml(url, template);
+        res.status(200).set({ 'Content-Type': 'text/html' }).end(template);
+      } catch (e: any) {
+        vite.ssrFixStacktrace?.(e);
+        next(e);
+      }
+    });
   } else {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
@@ -1628,14 +1643,20 @@ async function startServer() {
 }
 
 
-// Make sure on startup we populate everything
+// Make sure on startup we populate everything safely
 setTimeout(async () => {
-  const allSymbols = Object.keys(yahooSymbolMap);
-  const chunkSize = 15;
-  for (let i = 0; i < allSymbols.length; i += chunkSize) {
-    const chunk = allSymbols.slice(i, i + chunkSize);
-    await fetchYahooQuotesBulk(chunk);
+  try {
+    const allSymbols = Object.keys(yahooSymbolMap);
+    const chunkSize = 15;
+    for (let i = 0; i < allSymbols.length; i += chunkSize) {
+      const chunk = allSymbols.slice(i, i + chunkSize);
+      await fetchYahooQuotesBulk(chunk);
+    }
+  } catch (e) {
+    console.warn('Initial market data prefetch notice:', e);
   }
 }, 3000);
 
-startServer();
+startServer().catch((err) => {
+  console.error("Fatal error starting server:", err);
+});

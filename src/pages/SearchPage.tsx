@@ -39,7 +39,7 @@ const UNBOXING_ARTICLES: (ResearchItem & { tickerBadge: string; volNumber: strin
     volNumber: 'Vol. 51, August 26',
     title: 'CNMA: Sustainable 9% Dividend Play with Limited Downside',
     subtitle: 'Analisis fundamental dan valuasi bioskop XXI di tengah pertumbuhan box office nasional.',
-    author: 'Stockbit Research Team',
+    author: 'BrusaSCS Research Team',
     date: '26 Agu 2026',
     category: 'Unboxing Saham',
     rating: 'BUY',
@@ -66,7 +66,7 @@ const UNBOXING_ARTICLES: (ResearchItem & { tickerBadge: string; volNumber: strin
     volNumber: 'Vol. 50, June 26',
     title: 'AMMN: When Passive Selling Creates an Active Opportunity',
     subtitle: 'Peluang akumulasi pasca-rebalancing indeks global dengan smelter tembaga yang mulai beroperasi penuh.',
-    author: 'Stockbit Research Team',
+    author: 'BrusaSCS Research Team',
     date: '26 Jun 2026',
     category: 'Unboxing Saham',
     rating: 'BUY',
@@ -93,7 +93,7 @@ const UNBOXING_ARTICLES: (ResearchItem & { tickerBadge: string; volNumber: strin
     volNumber: 'Vol. 49, May 26',
     title: 'Integrasi BDMN–MUFG: Asymmetric Upside Opportunity',
     subtitle: 'Sinergi pembiayaan otomotif Adira Finance dan jaringan korporasi global Mitsubishi UFJ.',
-    author: 'Stockbit Research Team',
+    author: 'BrusaSCS Research Team',
     date: '26 Mei 2026',
     category: 'Unboxing Saham',
     rating: 'BUY',
@@ -120,7 +120,7 @@ const UNBOXING_ARTICLES: (ResearchItem & { tickerBadge: string; volNumber: strin
     volNumber: 'Vol. 48, April 26',
     title: 'BBCA: Resilient NIM & Digital Banking Dominance',
     subtitle: 'Keunggulan dana murah CASA 82% mempertahankan profitabilitas di era suku bunga tinggi.',
-    author: 'Stockbit Research Team',
+    author: 'BrusaSCS Research Team',
     date: '18 Apr 2026',
     category: 'Unboxing Saham',
     rating: 'BUY',
@@ -234,7 +234,7 @@ export function SearchPage({ onOpenProfile }: { onOpenProfile?: () => void }) {
     };
 
     fetchQuotes();
-    const interval = setInterval(fetchQuotes, 2000);
+    const interval = setInterval(fetchQuotes, 1500);
     return () => clearInterval(interval);
   }, []);
 
@@ -457,7 +457,7 @@ export function SearchPage({ onOpenProfile }: { onOpenProfile?: () => void }) {
               </div>
             ) : (
               <div className="space-y-1.5">
-                {filteredAssets.map((asset) => {
+                {filteredAssets.map((asset, idx) => {
                   const displaySym = asset.symbol.replace('USDT', '');
                   const isIdr = asset.currency === 'IDR' || isIDXStock(asset.symbol);
                   const q = assetQuotes[asset.symbol];
@@ -472,7 +472,7 @@ export function SearchPage({ onOpenProfile }: { onOpenProfile?: () => void }) {
 
                   return (
                     <div 
-                      key={asset.symbol}
+                      key={`filt-${asset.symbol}-${idx}`}
                       onClick={() => setSelectedAsset(asset.symbol)}
                       className="flex items-center justify-between p-3 bg-white rounded-xl border border-gray-100/90 hover:border-emerald-200 active:bg-gray-50 shadow-2xs transition-all cursor-pointer group"
                     >
@@ -538,7 +538,7 @@ export function SearchPage({ onOpenProfile }: { onOpenProfile?: () => void }) {
 
               {/* List of Stocks */}
               <div className="space-y-1.5 pt-1">
-                {ALL_GLOBAL_ASSETS.filter(a => a.category === 'Saham IDX').map((asset) => {
+                {ALL_GLOBAL_ASSETS.filter(a => a.category === 'Saham IDX').map((asset, idx) => {
                   const q = assetQuotes[asset.symbol];
                   const price = q ? q.price : asset.basePrice;
                   const pct = q ? q.pctChange : 0;
@@ -546,7 +546,7 @@ export function SearchPage({ onOpenProfile }: { onOpenProfile?: () => void }) {
 
                   return (
                     <div 
-                      key={asset.symbol}
+                      key={`idxstock-${asset.symbol}-${idx}`}
                       onClick={() => setSelectedAsset(asset.symbol)}
                       className="flex items-center justify-between p-3 bg-white rounded-xl border border-gray-100/90 hover:border-emerald-200 active:bg-gray-50 shadow-2xs transition-all cursor-pointer group"
                     >
@@ -797,7 +797,7 @@ export function SearchPage({ onOpenProfile }: { onOpenProfile?: () => void }) {
               <span>Harga (USD)</span>
             </div>
 
-            {ALL_GLOBAL_ASSETS.filter(a => a.category !== 'Saham IDX').map((asset) => {
+            {ALL_GLOBAL_ASSETS.filter(a => a.category !== 'Saham IDX').map((asset, idx) => {
               const q = assetQuotes[asset.symbol];
               const price = q ? q.price : asset.basePrice;
               const pct = q ? q.pctChange : 0;
@@ -811,7 +811,7 @@ export function SearchPage({ onOpenProfile }: { onOpenProfile?: () => void }) {
 
               return (
                 <div 
-                  key={asset.symbol}
+                  key={`global-${asset.symbol}-${idx}`}
                   onClick={() => setSelectedAsset(asset.symbol)}
                   className="flex items-center justify-between p-3 bg-white rounded-xl border border-gray-100/90 hover:border-emerald-200 active:bg-gray-50 shadow-2xs transition-all cursor-pointer group"
                 >

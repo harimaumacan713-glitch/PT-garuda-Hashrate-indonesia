@@ -1,61 +1,56 @@
 import React, { useState } from 'react';
 import { Eye, EyeOff, ChevronRight } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { detectAssetType, getEngineForSymbol } from '../engines';
 
 export interface MyInvestmentCardProps {
+  key?: React.Key;
   symbol: string;
-  lot: number;
+  lot?: number | null;
+  quantity?: number;
   avgPrice: number;
   currentPrice: number;
   totalCost?: number;
   currency?: 'IDR' | 'USD';
   onClick?: () => void;
   className?: string;
-  key?: React.Key;
 }
 
 export function MyInvestmentCard({
   symbol,
   lot,
+  quantity,
   avgPrice,
   currentPrice,
   totalCost,
-  currency = 'IDR',
   onClick,
   className
 }: MyInvestmentCardProps) {
   const [hideValues, setHideValues] = useState<boolean>(false);
 
   const displaySymbol = (symbol || '').toUpperCase().replace('USDT', '');
-  const isIdr = currency === 'IDR' || ['BBCA', 'BBRI', 'BMRI', 'BBNI', 'TLKM', 'ASII', 'GOTO', 'BREN', 'AMMN', 'ANTM', 'ICBP', 'ADRO', 'PTBA', 'UNVR', 'KLBF', 'LABA', 'TAPGHDCH6A'].includes(displaySymbol);
+  const { assetType } = detectAssetType(symbol);
+  const engine = getEngineForSymbol(symbol);
 
-  const sharesPerLot = isIdr ? 100 : 1;
-  const totalShares = (lot || 0) * sharesPerLot;
-  const effectivePrice = typeof currentPrice === 'number' && currentPrice >= 0 ? currentPrice : (avgPrice || 0);
-  const marketValue = totalShares * effectivePrice;
-  const costBasis = totalCost && totalCost > 0 ? totalCost : (totalShares * (avgPrice || 0));
+  // Compute effective quantities and calculations
+  let effectiveQty = quantity || 0;
+  let effectiveLot: number | null = lot !== undefined ? lot : null;
+
+  if (assetType === 'stock_id') {
+    if (effectiveLot !== null && effectiveLot !== undefined) {
+      effectiveQty = effectiveLot * 100;
+    } else if (effectiveQty > 0) {
+      effectiveLot = Math.floor(effectiveQty / 100);
+      effectiveQty = effectiveLot * 100;
+    }
+  }
+
+  const effectivePrice = typeof currentPrice === 'number' && currentPrice > 0 ? currentPrice : (avgPrice || 0);
+  const marketValue = effectiveQty * effectivePrice;
+  const costBasis = totalCost && totalCost > 0 ? totalCost : (effectiveQty * (avgPrice || 0));
   const pnl = marketValue - costBasis;
-  const pnlPct = costBasis > 0 ? (pnl / costBasis) * 100 : (marketValue === 0 && costBasis > 0 ? -100 : 0);
+  const pnlPct = costBasis > 0 ? (pnl / costBasis) * 100 : 0;
   const isGain = pnl >= 0;
-
-  // Number formatting helpers matching Stockbit screenshot
-  const formatNum = (val: number) => {
-    if (val === 0) return '0';
-    if (Number.isInteger(val) || Math.abs(val) >= 100) {
-      return Math.round(val).toLocaleString('en-US');
-    }
-    return val.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  };
-
-  const formatAvgPrice = (val: number) => {
-    if (val === 0) return '0';
-    if (Number.isInteger(val)) {
-      return val.toLocaleString('en-US');
-    }
-    return val.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  };
-
-  const currencyPrefix = isIdr ? 'Rp ' : '$';
 
   return (
     <div
@@ -65,7 +60,7 @@ export function MyInvestmentCard({
         className
       )}
     >
-      {/* Top Accent Indicator Bar */}
+      {/* Accent Indicator Bar */}
       <div 
         className={cn(
           "absolute top-0 bottom-[45px] left-0 w-1.5 rounded-tl-lg",
@@ -81,13 +76,20 @@ export function MyInvestmentCard({
             <span>
               Investasi Saya di <span className="font-bold text-gray-900 uppercase">{displaySymbol}</span>
             </span>
+            <span className={cn(
+              "text-[9px] font-extrabold px-1.5 py-0.2 rounded uppercase",
+              assetType === 'crypto' ? "bg-amber-100 text-amber-800" :
+              assetType === 'stock_us' ? "bg-blue-100 text-blue-800" : "bg-emerald-100 text-emerald-800"
+            )}>
+              {engine.market}
+            </span>
             <button
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
                 setHideValues(!hideValues);
               }}
-              className="text-gray-400 hover:text-gray-600 transition-colors p-0.5 -mt-0.5 focus:outline-none"
+              className="text-gray-400 hover:text-gray-600 transition-colors p-0.5 -mt-0.5 focus:outline-hidden"
               title={hideValues ? 'Tampilkan Nominal' : 'Sembunyikan Nominal'}
             >
               {hideValues ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -97,67 +99,61 @@ export function MyInvestmentCard({
           {/* Market Value + Percentage Row */}
           <div className="flex items-baseline gap-2 mt-1.5">
             <span className="text-[21px] sm:text-[23px] font-bold text-gray-900 tracking-tight leading-tight">
-              {hideValues ? '••••••••' : `${currencyPrefix}${formatNum(marketValue)}`}
+              {hideValues ? '••••••••' : engine.formatCurrencyValue(marketValue, engine.currency)}
             </span>
             <span
               className={cn(
-                "text-[13px] sm:text-[13.5px] font-medium tracking-tight",
+                "text-[14px] font-bold",
                 isGain ? "text-[#00B26A]" : "text-[#E53935]"
               )}
             >
-              {hideValues ? '' : `${isGain ? '+' : ''}${pnlPct.toFixed(2)}%`}
+              {hideValues ? '•••' : `${isGain ? '+' : ''}${pnlPct.toFixed(2)}%`}
             </span>
           </div>
-
-          {/* Subtitle */}
-          <span className="text-[11.5px] text-gray-400 font-normal mt-0.5 leading-none">
-            Market Value
-          </span>
         </div>
 
-        {/* Right Navigation Chevron */}
-        <ChevronRight className="w-5 h-5 text-gray-400 stroke-[2] shrink-0" />
+        {/* Chevron Indicator */}
+        <ChevronRight className="w-5 h-5 text-gray-400 shrink-0" />
       </div>
 
-      {/* DIVIDER */}
-      <div className="border-t border-gray-100" />
-
-      {/* BOTTOM 3-COLUMN METRICS SECTION */}
-      <div className="grid grid-cols-3 divide-x divide-gray-100 py-3 px-3.5 sm:px-4 bg-white">
-        {/* 1. Avg Price */}
-        <div className="flex flex-col pr-2">
-          <span className="text-[13.5px] font-bold text-gray-900 tracking-tight leading-tight">
-            {hideValues ? '••••' : `${currencyPrefix}${formatAvgPrice(avgPrice)}`}
+      {/* BOTTOM METRICS TABLE BAR */}
+      <div className="bg-[#F8FAFC] border-t border-gray-100 grid grid-cols-3 px-3.5 sm:px-4 py-2.5 text-left">
+        {/* Metric 1: Quantity or Lot */}
+        <div className="flex flex-col">
+          <span className="text-[10.5px] font-semibold text-gray-400 uppercase tracking-wide">
+            {assetType === 'stock_id' ? 'Jumlah Lot' : (assetType === 'crypto' ? 'Jumlah Koin' : 'Jumlah Lembar')}
           </span>
-          <span className="text-[11.5px] text-gray-400 font-normal mt-1 leading-none">
-            Avg Price
-          </span>
-        </div>
-
-        {/* 2. Bal Lot */}
-        <div className="flex flex-col px-2 sm:px-3">
-          <span className="text-[13.5px] font-bold text-gray-900 tracking-tight leading-tight">
-            {hideValues ? '••••' : formatNum(lot)}
-          </span>
-          <span className="text-[11.5px] text-gray-400 font-normal mt-1 leading-none">
-            Bal Lot
+          <span className="text-[12.5px] font-bold text-gray-800 mt-0.5 truncate">
+            {hideValues ? '••••' : (
+              assetType === 'stock_id' 
+                ? `${effectiveLot || Math.floor(effectiveQty / 100)} Lot`
+                : engine.formatQuantity(effectiveQty)
+            )}
           </span>
         </div>
 
-        {/* 3. P/L */}
-        <div className="flex flex-col pl-2 sm:pl-3">
+        {/* Metric 2: Average Price */}
+        <div className="flex flex-col">
+          <span className="text-[10.5px] font-semibold text-gray-400 uppercase tracking-wide">
+            Harga Rata-Rata
+          </span>
+          <span className="text-[12.5px] font-bold text-gray-800 mt-0.5 truncate font-mono">
+            {hideValues ? '••••' : engine.formatPrice(avgPrice)}
+          </span>
+        </div>
+
+        {/* Metric 3: Return / PnL */}
+        <div className="flex flex-col items-end text-right">
+          <span className="text-[10.5px] font-semibold text-gray-400 uppercase tracking-wide">
+            Return (P&amp;L)
+          </span>
           <span
             className={cn(
-              "text-[13.5px] font-bold tracking-tight leading-tight",
+              "text-[12.5px] font-bold mt-0.5 truncate",
               isGain ? "text-[#00B26A]" : "text-[#E53935]"
             )}
           >
-            {hideValues
-              ? '••••'
-              : `${currencyPrefix}${isGain ? '+' : '-'}${formatNum(Math.abs(pnl))}`}
-          </span>
-          <span className="text-[11.5px] text-gray-400 font-normal mt-1 leading-none">
-            P/L
+            {hideValues ? '••••' : `${isGain ? '+' : ''}${engine.formatCurrencyValue(pnl, engine.currency)}`}
           </span>
         </div>
       </div>

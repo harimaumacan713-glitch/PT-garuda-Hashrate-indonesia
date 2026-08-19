@@ -23,7 +23,7 @@ export const AVATAR_LIST: AvatarOption[] = [
   { id: 'avatar_11', name: 'Casual Boy', bgColor: '#6366F1', svgType: 'casual_blue' },
   { id: 'avatar_12', name: 'Turban Guy', bgColor: '#2563EB', svgType: 'turban_blue' },
   // Extra avatars revealed on "Lihat Semua Avatar"
-  { id: 'avatar_cat', name: 'Stockbit Cat Classic', bgColor: '#93C5FD', svgType: 'cat_classic' },
+  { id: 'avatar_cat', name: 'BrusaSCS Cat Classic', bgColor: '#93C5FD', svgType: 'cat_classic' },
   { id: 'avatar_13', name: 'Modern Woman', bgColor: '#EC4899', svgType: 'modern_woman' },
   { id: 'avatar_14', name: 'Crypto Bull', bgColor: '#059669', svgType: 'crypto_bull' },
   { id: 'avatar_15', name: 'Glasses Chic', bgColor: '#8B5CF6', svgType: 'glasses_chic' }

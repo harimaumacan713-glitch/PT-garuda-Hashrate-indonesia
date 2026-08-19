@@ -42,12 +42,14 @@ export function WelcomePage({ onLogin }: WelcomePageProps) {
       const profileRef = ref(db, `users/${uid}/profileData`);
       const profSnap = await get(profileRef);
       if (!profSnap.exists()) {
-        const name = userDisplayName || email.split('@')[0] || 'Investor';
+        const isDewangga = email.toLowerCase().includes('dewanggamiliarder');
+        const name = isDewangga ? 'Brusa Sekuritas' : (userDisplayName || email.split('@')[0] || 'Investor');
+        const usr = isDewangga ? 'BrusaSekuritas' : (name.toLowerCase().replace(/\s+/g, '') + Math.floor(100 + Math.random() * 900));
         await set(profileRef, {
           displayName: name,
-          username: name.toLowerCase().replace(/\s+/g, '') + Math.floor(100 + Math.random() * 900),
+          username: usr,
           website: '',
-          biography: '',
+          biography: 'Official Brusa Sekuritas Account',
           gender: 'Laki-laki',
           createdAt: Date.now()
         });

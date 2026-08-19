@@ -635,6 +635,8 @@ export const ALL_GLOBAL_ASSETS: AssetMeta[] = [
   { symbol: 'AUTO', name: 'PT Astra Otoparts Tbk', category: 'Saham IDX', logo: generateFallbackBadge('AUTO'), basePrice: 2900, currency: 'IDR', sector: 'Consumer Cyclicals', idxSector: 'CYCLICAL', marketCap: 'Rp 14.0 T', indices: ['SRI-KEHATI', 'ISSI', 'KOMPAS100', 'IHSG'], specialBoards: ['Day Trade'] },
 
   // 3. ENERGY (Energi & Batu Bara & Migas)
+  { symbol: 'DEWA', name: 'PT Darma Henwa Tbk', category: 'Saham IDX', logo: generateFallbackBadge('DEWA'), basePrice: 420, currency: 'IDR', sector: 'Energy & Mining Services', idxSector: 'ENERGY', marketCap: 'Rp 9.2 T', indices: ['KOMPAS100', 'ISSI', 'IHSG'], specialBoards: ['Day Trade'] },
+  { symbol: 'BUMI', name: 'PT Bumi Resources Tbk', category: 'Saham IDX', logo: generateFallbackBadge('BUMI'), basePrice: 181, currency: 'IDR', sector: 'Energy & Coal', idxSector: 'ENERGY', marketCap: 'Rp 67.2 T', indices: ['KOMPAS100', 'ISSI', 'IHSG'], specialBoards: ['Day Trade'] },
   { symbol: 'ADRO', name: 'PT Alamtri Resources Indonesia (Adaro) Tbk', category: 'Saham IDX', logo: LOGO_ADRO, basePrice: 2530, currency: 'IDR', sector: 'Energy & Coal', idxSector: 'ENERGY', marketCap: 'Rp 78 T', indices: ['IDX30', 'LQ45', 'SRI-KEHATI', 'JII', 'ISSI', 'KOMPAS100', 'IHSG'], specialBoards: ['Day Trade'] },
   { symbol: 'PTBA', name: 'PT Bukit Asam Tbk', category: 'Saham IDX', logo: LOGO_PTBA, basePrice: 2360, currency: 'IDR', sector: 'Energy & Coal', idxSector: 'ENERGY', marketCap: 'Rp 27 T', indices: ['IDX30', 'LQ45', 'JII', 'ISSI', 'KOMPAS100', 'IHSG'], specialBoards: ['Day Trade'] },
   { symbol: 'PGAS', name: 'PT Perusahaan Gas Negara Tbk', category: 'Saham IDX', logo: generateFallbackBadge('PGAS'), basePrice: 1495, currency: 'IDR', sector: 'Energy & Utilities', idxSector: 'ENERGY', marketCap: 'Rp 36.2 T', indices: ['IDX30', 'LQ45', 'SRI-KEHATI', 'JII', 'ISSI', 'KOMPAS100', 'IHSG'], specialBoards: ['Day Trade'] },
@@ -910,6 +912,7 @@ export function getAssetLogo(symbol: string): string {
 export function getAssetBrandColor(symbol: string): string {
   if (!symbol) return '#00B26A';
   const clean = symbol.toUpperCase().replace('USDT', '').trim();
+  if (clean === 'DEWA') return '#00AA5B';
   return BRAND_COLORS[clean] || '#00B26A';
 }
 
@@ -917,6 +920,8 @@ export function getAssetName(symbol: string): string {
   if (!symbol) return 'Asset';
   const clean = symbol.toUpperCase().trim();
   const withoutUSDT = clean.replace('USDT', '');
+
+  if (clean === 'DEWA') return 'PT Darma Henwa Tbk';
 
   const found = ALL_GLOBAL_ASSETS.find(
     a => a.symbol.toUpperCase() === clean || 
@@ -934,11 +939,12 @@ export function getAssetName(symbol: string): string {
   if (clean === 'GOTO') return 'PT GoTo Gojek Tokopedia Tbk';
   if (clean === 'ANTM') return 'PT Aneka Tambang Tbk';
   if (clean === 'TAPGHDCH6A') return 'Call Waran TAPG HD';
-  return withoutUSDT;
+  return `PT ${withoutUSDT} Emiten Tbk`;
 }
 
 export function isIDXStock(symbol: string): boolean {
   const clean = symbol.toUpperCase().replace('USDT', '').trim();
+  if (clean === 'DEWA') return true;
   const found = ALL_GLOBAL_ASSETS.find(a => a.symbol.toUpperCase() === clean);
   if (found && found.category === 'Saham IDX') return true;
   const idxList = [

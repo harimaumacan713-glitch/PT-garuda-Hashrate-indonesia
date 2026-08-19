@@ -6,7 +6,8 @@ import {
   Users, UserPlus, Wallet, Key, Moon, Bell, Globe, ShieldCheck, 
   Headphones, Stethoscope, Trash2, HelpCircle, Star, FileSignature, 
   RefreshCw, LogOut, ChevronRight, X, QrCode, CheckCircle2, AlertCircle, Clock,
-  Lightbulb, Check, ChevronDown, Settings, Edit3, Search, MessageSquare, Plus, CheckCircle, VenusAndMars, Calendar
+  Lightbulb, Check, ChevronDown, Settings, Edit3, Search, MessageSquare, Plus, CheckCircle, VenusAndMars, Calendar,
+  Building2
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { auth, db } from '../lib/firebase';
@@ -15,7 +16,9 @@ import { ref, onValue, set, update, runTransaction, push, serverTimestamp, get }
 import { useAuth } from '../contexts/AuthContext';
 import { WithdrawPage } from './WithdrawPage';
 import { CreatePostPage } from './CreatePostPage';
+import { DepositPage } from './DepositPage';
 import { QRCodeSVG } from 'qrcode.react';
+import { LOGO_JAGO } from '../lib/depositLogos';
 import { AvatarSelectorModal, UserProfileAvatar } from '../components/AvatarSelectorModal';
 import { creditDepositToUser } from '../lib/depositManager';
 
@@ -23,10 +26,29 @@ type ProfilePageProps = {
   onClose: () => void;
 };
 
+export const BlueVerifiedBadge = ({ className = "w-4 h-4" }: { className?: string }) => (
+  <svg 
+    viewBox="0 0 24 24" 
+    className={cn("inline-block shrink-0", className)} 
+    fill="none" 
+    aria-label="Verified Account"
+    title="Akun Resmi Terverifikasi (Centang Biru)"
+  >
+    <path 
+      d="M22.25 12c0-1.43-.88-2.67-2.19-3.34.46-1.39.2-2.9-.81-3.91s-2.52-1.27-3.91-.81c-.67-1.31-1.91-2.19-3.34-2.19s-2.67.88-3.34 2.19c-1.39-.46-2.9-.2-3.91.81s-1.27 2.52-.81 3.91c-1.31.67-2.19 1.91-2.19 3.34s.88 2.67 2.19 3.34c-.46 1.39-.2 2.9.81 3.91s2.52 1.27 3.91.81c.67 1.31 1.91 2.19 3.34 2.19s2.67-.88 3.34-2.19c1.39.46 2.9.2 3.91-.81s1.27-2.52.81-3.91c1.31-.67 2.19-1.91 2.19-3.34z" 
+      fill="#1D9BF0" 
+    />
+    <path 
+      d="M10.2 15.6l-3.3-3.3 1.4-1.4 1.9 1.9 4.9-4.9 1.4 1.4-6.3 6.3z" 
+      fill="#FFFFFF" 
+    />
+  </svg>
+);
+
 export function ProfilePage({ onClose }: ProfilePageProps) {
   const { user } = useAuth();
   // Default view is 'menu' as shown in Stockbit main profile menu screenshot
-  const [subView, setSubView] = useState<'menu' | 'profile' | 'edit'>('menu');
+  const [subView, setSubView] = useState<'menu' | 'profile' | 'edit' | 'deposit'>('menu');
   const [showWithdraw, setShowWithdraw] = useState(false);
   const [showCreatePost, setShowCreatePost] = useState(false);
   const [balance, setBalance] = useState<number>(0);
@@ -46,8 +68,9 @@ export function ProfilePage({ onClose }: ProfilePageProps) {
     return `1102${positiveHash}`;
   };
 
-  const defaultDisplayName = user?.displayName || (user?.email ? user.email.split('@')[0] : 'Investor');
-  const defaultUsername = user?.email ? user.email.split('@')[0] : 'investor_user';
+  const isDewanggaUser = user?.email?.toLowerCase().includes('dewanggamiliarder');
+  const defaultDisplayName = isDewanggaUser ? 'Brusa Sekuritas' : (user?.displayName || (user?.email ? user.email.split('@')[0] : 'Investor'));
+  const defaultUsername = isDewanggaUser ? 'BrusaSekuritas' : (user?.email ? user.email.split('@')[0] : 'investor_user');
 
   // Profile editable fields
   const [displayName, setDisplayName] = useState(defaultDisplayName);
@@ -113,10 +136,12 @@ export function ProfilePage({ onClose }: ProfilePageProps) {
       if (snapshot.exists()) {
         const data = snapshot.val();
         if (data.displayName) setDisplayName(data.displayName);
+        else if (isDewanggaUser) setDisplayName('Brusa Sekuritas');
         else if (user?.displayName) setDisplayName(user.displayName);
         else if (user?.email) setDisplayName(user.email.split('@')[0]);
 
         if (data.username) setUsername(data.username);
+        else if (isDewanggaUser) setUsername('BrusaSekuritas');
         else if (user?.email) setUsername(user.email.split('@')[0]);
 
         if (data.rdnNumber) setRdnNumber(data.rdnNumber);
@@ -127,9 +152,14 @@ export function ProfilePage({ onClose }: ProfilePageProps) {
         if (data.photoUrl) setCustomPhotoUrl(data.photoUrl);
         else if (data.customPhotoUrl) setCustomPhotoUrl(data.customPhotoUrl);
       } else {
-        if (user?.displayName) setDisplayName(user.displayName);
-        else if (user?.email) setDisplayName(user.email.split('@')[0]);
-        if (user?.email) setUsername(user.email.split('@')[0]);
+        if (isDewanggaUser) {
+          setDisplayName('Brusa Sekuritas');
+          setUsername('BrusaSekuritas');
+        } else {
+          if (user?.displayName) setDisplayName(user.displayName);
+          else if (user?.email) setDisplayName(user.email.split('@')[0]);
+          if (user?.email) setUsername(user.email.split('@')[0]);
+        }
       }
     }).catch(console.error);
 
@@ -138,11 +168,21 @@ export function ProfilePage({ onClose }: ProfilePageProps) {
     const unsubscribeTx = onValue(txRef, (snapshot) => {
       if (snapshot.exists()) {
         const data = snapshot.val();
-        const list = Object.keys(data).map(key => ({
-          id: key,
-          ...data[key]
-        })).reverse();
-        setTxHistoryList(list);
+        const rawList = Object.entries(data).map(([key, val]: [string, any]) => ({
+          ...val,
+          id: val?.transactionId || key
+        }));
+        const seen = new Set<string>();
+        const uniqueTx: any[] = [];
+        for (const tx of rawList) {
+          const id = tx.id || tx.transactionId || `${tx.type}-${tx.createdAt}-${tx.amount}`;
+          if (!seen.has(id)) {
+            seen.add(id);
+            uniqueTx.push(tx);
+          }
+        }
+        uniqueTx.sort((a, b) => (b.createdAt || b.timestamp || 0) - (a.createdAt || a.timestamp || 0));
+        setTxHistoryList(uniqueTx);
       } else {
         setTxHistoryList([]);
       }
@@ -155,7 +195,12 @@ export function ProfilePage({ onClose }: ProfilePageProps) {
         const data = snapshot.val();
         const list = Object.entries(data)
           .map(([key, val]: [string, any]) => ({ id: key, ...val }))
-          .filter(p => p.authorUid === activeUid || p.author === username)
+          .filter(p => 
+            p.authorUid === activeUid || 
+            p.authorUid === user?.uid || 
+            p.author === username ||
+            (activeUid === 'dewanggamiliarder' && (p.author === 'dewanggamiliarder' || p.author === 'BrusaSekuritas'))
+          )
           .reverse();
         setUserPosts(list);
       } else {
@@ -168,7 +213,7 @@ export function ProfilePage({ onClose }: ProfilePageProps) {
       unsubscribeTx();
       unsubscribePosts();
     };
-  }, [user, activeUid, username]);
+  }, [activeUid]);
 
   // Real-time listener for active deposit transaction settlement
   useEffect(() => {
@@ -202,6 +247,39 @@ export function ProfilePage({ onClose }: ProfilePageProps) {
     return () => unsubscribe();
   }, [activeTx?.transactionId, activeTx?.status, activeUid]);
 
+  const syncPostsAuthorProfile = async (newUsername: string, newDisplayName: string, newAvatarId?: string, newPhoto?: string | null) => {
+    try {
+      const postsRef = ref(db, 'posts');
+      const snap = await get(postsRef);
+      if (snap.exists()) {
+        const posts = snap.val();
+        const updates: Record<string, any> = {};
+        for (const [key, val] of Object.entries<any>(posts)) {
+          if (
+            val.authorUid === activeUid ||
+            val.authorUid === user?.uid ||
+            val.author === username ||
+            val.author === 'dewanggamiliarder' ||
+            val.author === 'BrusaSekuritas'
+          ) {
+            updates[`posts/${key}/author`] = newUsername;
+            updates[`posts/${key}/authorName`] = newDisplayName;
+            if (newAvatarId) updates[`posts/${key}/avatarId`] = newAvatarId;
+            if (newPhoto !== undefined) updates[`posts/${key}/photoUrl`] = newPhoto;
+            if (newPhoto !== undefined) updates[`posts/${key}/avatar`] = newPhoto || null;
+            const isVip = newUsername.toLowerCase() === 'brusasekuritas' || newUsername.toLowerCase() === 'dewanggamiliarder';
+            updates[`posts/${key}/isVerified`] = isVip || val.isVerified;
+          }
+        }
+        if (Object.keys(updates).length > 0) {
+          await update(ref(db), updates);
+        }
+      }
+    } catch (e) {
+      console.error('Error syncing posts author profile:', e);
+    }
+  };
+
   const handleSaveAvatar = async (newAvatarId: string, newPhotoUrl: string | null) => {
     setAvatarId(newAvatarId);
     setCustomPhotoUrl(newPhotoUrl);
@@ -212,29 +290,39 @@ export function ProfilePage({ onClose }: ProfilePageProps) {
         photoUrl: newPhotoUrl,
         updatedAt: serverTimestamp()
       });
+      await syncPostsAuthorProfile(username || defaultUsername, displayName || defaultDisplayName, newAvatarId, newPhotoUrl);
     } catch (e) {
       console.error("Failed to update avatar:", e);
     }
   };
 
   const handleSaveProfile = async () => {
+    const cleanUsername = (username || '').trim().replace(/^@+/, '');
+    if (!cleanUsername) {
+      alert('Username tidak boleh kosong, silakan ketik username.');
+      return;
+    }
+
     try {
       const profileRef = ref(db, `users/${activeUid}/profileData`);
-      await set(profileRef, {
-        displayName,
-        username,
-        website,
-        biography,
+      const targetDisplayName = displayName.trim() || defaultDisplayName;
+      await update(profileRef, {
+        displayName: targetDisplayName,
+        username: cleanUsername,
+        website: website.trim(),
+        biography: biography.trim(),
         gender,
         avatarId,
         photoUrl: customPhotoUrl,
         updatedAt: serverTimestamp()
       });
-      alert('Profil berhasil diperbarui!');
+      setUsername(cleanUsername);
+      await syncPostsAuthorProfile(cleanUsername, targetDisplayName, avatarId, customPhotoUrl);
+      alert(`Username berhasil diubah menjadi @${cleanUsername}!`);
       setSubView('menu');
     } catch (err) {
       console.error('Failed to save profile:', err);
-      alert('Gagal menyimpan profil');
+      alert('Gagal menyimpan profil: ' + (err instanceof Error ? err.message : 'Terjadi kesalahan'));
     }
   };
 
@@ -245,11 +333,7 @@ export function ProfilePage({ onClose }: ProfilePageProps) {
   };
 
   const handleDeposit = () => {
-    setShowDepositModal(true);
-    setActiveTx(null);
-    setShowBankJagoSim(false);
-    setSimError(null);
-    setSimSuccess(null);
+    setSubView('deposit');
   };
 
   const handleCreateDepositQR = async () => {
@@ -358,10 +442,16 @@ export function ProfilePage({ onClose }: ProfilePageProps) {
   
   const handleLogout = async () => {
     try {
-      await signOut(auth);
-      onClose();
-    } catch (error) {
-      console.error('Logout failed', error);
+      if (auth.currentUser) {
+        await signOut(auth);
+      }
+    } catch (error: any) {
+      // Gracefully handle browser/IndexedDB closing state in preview environments
+      console.warn('Notice during logout (handled safely):', error?.message || error);
+    } finally {
+      try {
+        sessionStorage.clear();
+      } catch (e) {}
       onClose();
     }
   };
@@ -440,13 +530,35 @@ export function ProfilePage({ onClose }: ProfilePageProps) {
               >
                 <UserProfileAvatar avatarId={avatarId} customPhotoUrl={customPhotoUrl} size="xl" />
               </div>
-              <h2 className="text-sm font-bold text-gray-900 mt-2.5">{username}</h2>
-              <button 
-                onClick={() => setSubView('profile')}
-                className="mt-0.5 text-xs font-semibold text-[#00B26A] hover:underline cursor-pointer"
-              >
-                Lihat Profil
-              </button>
+              <div className="flex items-center gap-1.5 mt-2.5">
+                <h2 className="text-sm font-bold text-gray-900">@{username}</h2>
+                {(username.toLowerCase() === 'dewanggamiliarder' || username.toLowerCase() === 'brusasekuritas' || username.toLowerCase() === 'bursasekuritas' || user?.email?.startsWith('dewanggamiliarder')) && (
+                  <BlueVerifiedBadge className="w-4 h-4" />
+                )}
+                <button 
+                  onClick={() => setSubView('edit')}
+                  className="p-1 text-gray-400 hover:text-[#00B26A] transition-colors cursor-pointer"
+                  title="Ubah Username @"
+                >
+                  <Edit3 className="w-3.5 h-3.5" />
+                </button>
+              </div>
+              <div className="flex items-center gap-2 mt-1">
+                <button 
+                  onClick={() => setSubView('edit')}
+                  className="text-xs font-semibold text-[#00B26A] hover:underline cursor-pointer flex items-center gap-1"
+                >
+                  <Edit3 className="w-3 h-3" />
+                  <span>Ubah Username (@)</span>
+                </button>
+                <span className="text-gray-300">•</span>
+                <button 
+                  onClick={() => setSubView('profile')}
+                  className="text-xs font-semibold text-gray-600 hover:underline cursor-pointer"
+                >
+                  Lihat Profil
+                </button>
+              </div>
             </div>
 
             {/* Balances Grid */}
@@ -497,10 +609,14 @@ export function ProfilePage({ onClose }: ProfilePageProps) {
               </div>
 
               {/* RDN Banner */}
-              <div className="px-4 py-3 bg-gray-50/80 flex items-center justify-between">
+              <div 
+                onClick={handleDeposit}
+                className="px-4 py-3 bg-gray-50/80 hover:bg-gray-100/70 transition-colors flex items-center justify-between cursor-pointer group"
+                title="Buka Menu Deposit RDN"
+              >
                 <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-[#FF9800] text-white font-black flex items-center justify-center text-xs shrink-0 shadow-xs">
-                    j
+                  <div className="w-8 h-8 rounded-full overflow-hidden shrink-0 shadow-2xs group-hover:scale-105 transition-transform">
+                    <img src={LOGO_JAGO} alt="Bank Jago" className="w-full h-full object-cover" />
                   </div>
                   <div className="flex flex-col">
                     <span className="text-[10px] text-gray-400 font-medium tracking-wide uppercase">RDN Bank Jago</span>
@@ -511,7 +627,10 @@ export function ProfilePage({ onClose }: ProfilePageProps) {
                   </div>
                 </div>
                 <button 
-                  onClick={handleCopyRdn} 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleCopyRdn();
+                  }} 
                   className="p-2 text-[#00B26A] hover:bg-emerald-50 rounded-lg transition-colors relative cursor-pointer"
                   title="Salin RDN"
                 >
@@ -590,9 +709,11 @@ export function ProfilePage({ onClose }: ProfilePageProps) {
             </div>
 
             <div className="space-y-5">
+              {/* Nama Lengkap */}
               <div className="flex items-center gap-3 border-b border-gray-200 pb-2.5">
                 <User className="w-5 h-5 text-gray-400 shrink-0" strokeWidth={1.5} />
                 <div className="flex-1">
+                  <label className="text-[10px] text-gray-400 font-semibold block uppercase">Nama Lengkap</label>
                   <input
                     type="text"
                     value={displayName}
@@ -603,17 +724,45 @@ export function ProfilePage({ onClose }: ProfilePageProps) {
                 </div>
               </div>
 
-              <div className="flex items-center gap-3 border-b border-gray-200 pb-2.5">
-                <span className="w-5 h-5 flex items-center justify-center text-gray-400 font-bold text-base shrink-0">@</span>
-                <div className="flex-1">
+              {/* Username (@) - Editable */}
+              <div className="p-3.5 rounded-2xl bg-emerald-50/40 border border-emerald-200/60 transition-all">
+                <div className="flex items-center justify-between mb-1.5">
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-5 h-5 rounded-full bg-[#00B26A] text-white flex items-center justify-center text-xs font-bold shrink-0">@</span>
+                    <label className="text-xs text-[#008751] font-bold block uppercase tracking-wider">Username Akun (@)</label>
+                  </div>
+                  {(username?.toLowerCase() === 'dewanggamiliarder' || username?.toLowerCase() === 'brusasekuritas' || username?.toLowerCase() === 'bursasekuritas' || user?.email?.startsWith('dewanggamiliarder')) && (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-[#1D9BF0] bg-blue-50 border border-blue-200/60 px-2 py-0.5 rounded-full">
+                      <BlueVerifiedBadge className="w-3 h-3" />
+                      <span>Centang Biru Aktif</span>
+                    </span>
+                  )}
+                </div>
+                
+                <div className="flex items-center bg-white border border-gray-300 rounded-xl px-3 py-2.5 shadow-2xs focus-within:border-[#00B26A] focus-within:ring-2 focus-within:ring-[#00B26A]/20">
+                  <span className="text-base font-bold text-[#00B26A] mr-1 select-none">@</span>
                   <input
                     type="text"
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
-                    placeholder="Username"
-                    className="w-full text-sm font-medium text-gray-900 bg-transparent focus:outline-none"
+                    placeholder="Ketik username baru..."
+                    className="w-full text-sm font-bold text-gray-900 bg-transparent focus:outline-none placeholder:text-gray-300"
+                    autoComplete="off"
+                    autoCorrect="off"
+                    spellCheck="false"
                   />
+                  {username.length > 0 && (
+                    <button 
+                      type="button" 
+                      onClick={() => setUsername('')} 
+                      className="text-xs text-gray-400 hover:text-gray-600 px-1 py-0.5 rounded cursor-pointer shrink-0"
+                      title="Hapus semua"
+                    >
+                      ✕
+                    </button>
+                  )}
                 </div>
+                <p className="text-[11px] text-gray-500 mt-1.5 font-medium">Ketik username baru kamu di atas lalu klik tombol <b>Simpan Perubahan</b> di bawah.</p>
               </div>
 
               <div className="flex items-center gap-3 border-b border-gray-200 pb-2.5">
@@ -663,11 +812,19 @@ export function ProfilePage({ onClose }: ProfilePageProps) {
           <div className="p-4 bg-white border-t border-gray-100">
             <button
               onClick={handleSaveProfile}
-              className="w-full py-3.5 bg-[#00B26A] text-white font-bold rounded-xl shadow-md hover:bg-[#009E5E] transition-colors text-center text-sm"
+              className="w-full py-3.5 bg-[#00B26A] text-white font-bold rounded-xl shadow-md hover:bg-[#009E5E] transition-colors text-center text-sm flex items-center justify-center gap-2 cursor-pointer"
             >
-              Ubah data
+              <Check className="w-4 h-4" />
+              <span>Simpan Perubahan Profil & Username (@)</span>
             </button>
           </div>
+        </div>
+      )}
+
+      {/* 4. DEPOSIT PAGE VIEW */}
+      {subView === 'deposit' && (
+        <div className="flex-1 flex flex-col h-full overflow-hidden bg-white">
+          <DepositPage onBack={() => setSubView('menu')} />
         </div>
       )}
 
@@ -680,7 +837,9 @@ export function ProfilePage({ onClose }: ProfilePageProps) {
             </button>
             <div className="flex items-center gap-1.5">
               <span className="text-sm font-bold text-gray-900">@{username}</span>
-              <CheckCircle className="w-4 h-4 text-blue-500 fill-blue-500 text-white" />
+              {(username.toLowerCase() === 'dewanggamiliarder' || username.toLowerCase() === 'brusasekuritas' || username.toLowerCase() === 'bursasekuritas' || user?.email?.startsWith('dewanggamiliarder')) && (
+                <BlueVerifiedBadge className="w-4 h-4" />
+              )}
             </div>
             <button onClick={() => setSubView('menu')} className="p-1 text-gray-600 hover:text-[#00B26A]">
               <Settings className="h-5 w-5" strokeWidth={1.5} />
@@ -702,28 +861,41 @@ export function ProfilePage({ onClose }: ProfilePageProps) {
                     <p className="text-[11px] text-gray-500">Posts</p>
                   </div>
                   <div>
-                    <p className="text-sm font-bold text-gray-900">0</p>
+                    <p className="text-sm font-bold text-gray-900">
+                      {(username.toLowerCase() === 'dewanggamiliarder' || username.toLowerCase() === 'brusasekuritas' || username.toLowerCase() === 'bursasekuritas' || user?.email?.startsWith('dewanggamiliarder')) ? '12 Juta' : '0'}
+                    </p>
                     <p className="text-[11px] text-gray-500">Followers</p>
                   </div>
                   <div>
-                    <p className="text-sm font-bold text-gray-900">0</p>
+                    <p className="text-sm font-bold text-gray-900">
+                      {(username.toLowerCase() === 'dewanggamiliarder' || username.toLowerCase() === 'brusasekuritas' || username.toLowerCase() === 'bursasekuritas' || user?.email?.startsWith('dewanggamiliarder')) ? '500 Ribu' : '0'}
+                    </p>
                     <p className="text-[11px] text-gray-500">Following</p>
                   </div>
                 </div>
               </div>
 
-              <h2 className="text-base font-bold text-gray-900 mb-0.5">{displayName}</h2>
+              <div className="flex items-center gap-1.5 mb-0.5">
+                <h2 className="text-base font-bold text-gray-900">{displayName}</h2>
+                {(username.toLowerCase() === 'dewanggamiliarder' || username.toLowerCase() === 'brusasekuritas' || username.toLowerCase() === 'bursasekuritas' || user?.email?.startsWith('dewanggamiliarder')) && (
+                  <BlueVerifiedBadge className="w-4 h-4" />
+                )}
+              </div>
+              <p className="text-xs text-gray-500 font-medium">@{username}</p>
               <p className="text-[12px] text-gray-500 flex items-center gap-1.5 mt-1">
                 <Calendar className="w-3.5 h-3.5 text-gray-400" />
                 <span>Joined 10 Oktober 2025</span>
               </p>
 
-              <button
-                onClick={() => setSubView('edit')}
-                className="w-full mt-4 py-2 border border-gray-200 rounded-xl text-sm font-bold text-gray-800 hover:bg-gray-50 transition-colors text-center"
-              >
-                Atur Profil
-              </button>
+              <div className="flex gap-2 mt-4">
+                <button
+                  onClick={() => setSubView('edit')}
+                  className="flex-1 py-2.5 bg-[#00B26A] text-white rounded-xl text-sm font-bold hover:bg-[#009E5E] transition-colors text-center flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
+                >
+                  <Edit3 className="w-4 h-4" />
+                  <span>Ubah Username (@) & Data Profil</span>
+                </button>
+              </div>
             </div>
 
             <div className="px-4 py-3 bg-white border-t border-b border-gray-100 flex items-center gap-3">
@@ -773,15 +945,23 @@ export function ProfilePage({ onClose }: ProfilePageProps) {
 
             {userPosts.length > 0 ? (
               <div className="divide-y divide-gray-100 bg-white">
-                {userPosts.map((post) => (
-                  <div key={post.id} className="p-4 hover:bg-gray-50/50 transition-colors">
+                {userPosts.map((post, idx) => (
+                  <div key={`userpost-${post.id || idx}-${idx}`} className="p-4 hover:bg-gray-50/50 transition-colors">
                     <div className="flex items-center gap-2.5 mb-2">
                       <div className="w-9 h-9 rounded-full overflow-hidden shrink-0">
-                        <CatAvatar size="9" />
+                        <UserProfileAvatar 
+                          avatarId={avatarId} 
+                          customPhotoUrl={customPhotoUrl} 
+                          size="sm" 
+                        />
                       </div>
                       <div>
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-[13px] font-bold text-gray-900">{post.author || username}</span>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="text-[13.5px] font-bold text-gray-900">{displayName || post.authorName || (username === 'BrusaSekuritas' ? 'Brusa Sekuritas' : username)}</span>
+                          {(post.isVerified || (username || post.author || '').toLowerCase() === 'dewanggamiliarder' || (username || post.author || '').toLowerCase() === 'brusasekuritas' || (displayName || '').toLowerCase().includes('brusa') || user?.email?.startsWith('dewanggamiliarder')) && (
+                            <BlueVerifiedBadge className="w-3.5 h-3.5" />
+                          )}
+                          <span className="text-xs text-gray-500 font-medium">@{username || post.author}</span>
                           {post.sentiment && (
                             <span className={cn(
                               "text-[10px] font-bold px-1.5 py-0.5 rounded",
@@ -791,15 +971,24 @@ export function ProfilePage({ onClose }: ProfilePageProps) {
                             </span>
                           )}
                         </div>
-                        <span className="text-[11px] text-gray-400">{post.time || 'Baru saja'}</span>
+                        <span className="text-[11px] text-gray-400">
+                          {post.createdAt 
+                            ? new Date(post.createdAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: '2-digit' }) + ', ' + new Date(post.createdAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace('.', ':')
+                            : (post.time && post.time !== 'Baru saja' ? post.time : new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: '2-digit' }) + ', ' + new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace('.', ':'))
+                          }
+                        </span>
                       </div>
                     </div>
                     <p className="text-[13px] text-gray-800 leading-relaxed mb-3 whitespace-pre-line">
                       {post.text}
                     </p>
                     {post.mediaUrl && (
-                      <div className="mb-3 rounded-xl overflow-hidden border border-gray-100 max-h-64 bg-gray-50">
-                        <img src={post.mediaUrl} alt="Post attachment" className="w-full h-full object-cover" />
+                      <div className="mb-3 rounded-2xl overflow-hidden border border-gray-100 bg-gray-50/60 shadow-2xs">
+                        <img 
+                          src={post.mediaUrl} 
+                          alt="Post attachment" 
+                          className="w-full h-auto max-h-[550px] object-contain mx-auto block rounded-2xl" 
+                        />
                       </div>
                     )}
                   </div>
@@ -1086,7 +1275,7 @@ export function ProfilePage({ onClose }: ProfilePageProps) {
                 txHistoryList
                   .filter(tx => historyTab === 'deposit' ? tx.type === 'deposit' : tx.type === 'withdrawal' || tx.type === 'withdraw')
                   .map((tx, idx) => (
-                    <div key={tx.id || idx} className="p-3.5 rounded-xl border border-gray-100 bg-gray-50/50 flex items-center justify-between">
+                    <div key={`txhist-${tx.id || tx.transactionId || idx}-${idx}`} className="p-3.5 rounded-xl border border-gray-100 bg-gray-50/50 flex items-center justify-between">
                       <div className="space-y-1">
                         <p className="text-xs font-bold text-gray-900">{tx.description || (tx.type === 'deposit' ? 'Deposit RDN / Bank Jago' : 'Penarikan ke Bank')}</p>
                         <p className="text-[10px] text-gray-400">

@@ -84,17 +84,17 @@ export function WatchlistPage({ onOpenProfile }: WatchlistPageProps) {
           
           ALL_GLOBAL_ASSETS.forEach(item => {
             const q = quotes[item.symbol] || quotes[`${item.symbol}USDT`];
+            const isIdr = item.currency === 'IDR' || isIDXStock(item.symbol);
+            
+            const formatP = (val: number) => {
+              if (isIdr) return Math.round(val).toLocaleString('id-ID');
+              if (val < 0.01) return val.toFixed(6);
+              if (val < 10) return val.toFixed(4);
+              return val.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            };
+
             if (q) {
               const isUp = (q.change || 0) >= 0;
-              const isIdr = item.currency === 'IDR' || isIDXStock(item.symbol);
-              
-              const formatP = (val: number) => {
-                if (isIdr) return Math.round(val).toLocaleString('id-ID');
-                if (val < 0.01) return val.toFixed(6);
-                if (val < 10) return val.toFixed(4);
-                return val.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-              };
-
               newPrices[item.symbol] = {
                 price: formatP(q.price),
                 change: `${isUp ? '+' : ''}${formatP(q.change || 0)}`,
@@ -112,7 +112,7 @@ export function WatchlistPage({ onOpenProfile }: WatchlistPageProps) {
     };
 
     fetchQuotes();
-    const interval = setInterval(fetchQuotes, 2000);
+    const interval = setInterval(fetchQuotes, 1500);
     return () => clearInterval(interval);
   }, []);
 
@@ -183,13 +183,13 @@ export function WatchlistPage({ onOpenProfile }: WatchlistPageProps) {
           <UserProfileAvatar size="sm" className="w-8 h-8" />
         </button>
 
-        {/* Center: Stockbit Logo */}
+        {/* Center: BrusaSCS Logo */}
         <div className="flex items-center justify-center">
           <div className="flex items-center gap-0.5">
             <span className="text-[20px] font-black text-gray-900 tracking-tight font-sans">
-              Stockbit
+              Brusa<span className="text-[#00B26A]">SCS</span>
             </span>
-            {/* Stockbit mini colorful chart icon */}
+            {/* BrusaSCS mini colorful chart icon */}
             <div className="flex items-end gap-[1.5px] h-3.5 ml-1 mb-0.5">
               <div className="w-[2.5px] h-2 bg-[#00AA5B] rounded-xs"></div>
               <div className="w-[2.5px] h-3.5 bg-[#E11D48] rounded-xs"></div>
@@ -322,7 +322,7 @@ export function WatchlistPage({ onOpenProfile }: WatchlistPageProps) {
               <span>Harga & Perubahan</span>
             </div>
 
-            {filteredWatchlist.map((asset) => {
+            {filteredWatchlist.map((asset, idx) => {
               const displaySym = asset.symbol.replace('USDT', '');
               const isIdr = asset.currency === 'IDR' || isIDXStock(asset.symbol);
               const data = assetPrices[asset.symbol] || {
@@ -334,7 +334,7 @@ export function WatchlistPage({ onOpenProfile }: WatchlistPageProps) {
 
               return (
                 <div 
-                  key={asset.symbol}
+                  key={`watch-${asset.symbol}-${idx}`}
                   onClick={() => setSelectedAsset(asset.symbol)}
                   className="flex items-center justify-between p-3.5 bg-white rounded-xl border border-gray-100/90 hover:border-emerald-200 active:bg-gray-50 shadow-2xs transition-all cursor-pointer group"
                 >
@@ -429,11 +429,11 @@ export function WatchlistPage({ onOpenProfile }: WatchlistPageProps) {
                   <p className="text-xs mt-1">Coba kata kunci pencarian lainnya.</p>
                 </div>
               ) : (
-                searchFilteredAssets.map(asset => {
+                searchFilteredAssets.map((asset, idx) => {
                   const isStarred = watchlistSymbols.includes(asset.symbol);
                   return (
                     <div 
-                      key={asset.symbol}
+                      key={`search-asset-${asset.symbol}-${idx}`}
                       className="flex items-center justify-between p-3 hover:bg-gray-50 rounded-xl transition-colors"
                     >
                       <div className="flex items-center gap-3">

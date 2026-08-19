@@ -19,6 +19,8 @@ import { AssetLogo } from '../components/AssetLogo';
 import { MyInvestmentCard } from '../components/MyInvestmentCard';
 import { RealTimeAssetChart } from '../components/RealTimeAssetChart';
 import { FinancialStatementsView } from '../components/FinancialStatementsView';
+import { CompanyProfileView } from '../components/CompanyProfileView';
+import { detectAssetType, getAssetEngine, DEFAULT_USD_TO_IDR } from '../engines';
 
 interface AssetDetailsPageProps {
   symbol: string;
@@ -27,13 +29,35 @@ interface AssetDetailsPageProps {
 
 export function AssetDetailsPage({ symbol, onBack }: AssetDetailsPageProps) {
   const displaySymbol = symbol.replace('USDT', '').toUpperCase();
-  const isIdr = isIDXStock(symbol) || ['BBCA', 'BBRI', 'BMRI', 'BBNI', 'TLKM', 'ASII', 'GOTO', 'BREN', 'AMMN', 'ANTM', 'ICBP', 'ADRO', 'PTBA', 'UNVR', 'KLBF'].includes(displaySymbol);
+  const assetMeta = detectAssetType(symbol);
+  const assetType = assetMeta.assetType;
+  const engine = getAssetEngine(assetType);
+  const isIdr = assetType === 'stock_id';
   const fullName = getAssetName(symbol);
   const matchedAsset = ALL_GLOBAL_ASSETS.find(a => a.symbol === symbol || a.symbol === displaySymbol || a.symbol === `${displaySymbol}USDT`);
-  const initialPriceVal = matchedAsset?.basePrice || (isIdr ? 6350 : 100);
+  const initialPriceVal = matchedAsset?.basePrice || (isIdr ? 3080 : (assetType === 'crypto' ? 64000 : 225));
 
-  // Navigation tabs
-  const [activeTab, setActiveTab] = useState<'STREAM' | 'KEYSTATS' | 'ORDERBOOK' | 'ANALISIS' | 'FINANSIAL' | 'SEASONALITY' | 'PERBANDINGAN'>('STREAM');
+  // Market status
+  const [marketStatus, setMarketStatus] = useState(engine.getMarketStatus());
+  useEffect(() => {
+    const update = () => setMarketStatus(engine.getMarketStatus());
+    update();
+    const interval = setInterval(update, 15000);
+    return () => clearInterval(interval);
+  }, [engine]);
+
+  // Navigation tabs adapted to Asset Engine
+  const availableTabs = React.useMemo(() => {
+    if (assetType === 'crypto') {
+      return ['STREAM', 'KEYSTATS', 'ORDERBOOK', 'ANALISIS'] as const;
+    }
+    if (assetType === 'stock_us') {
+      return ['STREAM', 'KEYSTATS', 'ORDERBOOK', 'ANALISIS', 'FINANSIAL'] as const;
+    }
+    return ['STREAM', 'KEYSTATS', 'ORDERBOOK', 'ANALISIS', 'FINANSIAL', 'SEASONALITY', 'PERBANDINGAN', 'CORP ACTION', 'INSIDER', 'PROFIL'] as const;
+  }, [assetType]);
+
+  const [activeTab, setActiveTab] = useState<string>('STREAM');
   const [streamFilter, setStreamFilter] = useState('All');
   const [streamSearch, setStreamSearch] = useState('');
   const [timeframe, setTimeframe] = useState('1D');
@@ -435,18 +459,24 @@ export function AssetDetailsPage({ symbol, onBack }: AssetDetailsPageProps) {
                 <ChevronDown className="w-4 h-4 text-gray-500" strokeWidth={2.5} />
               </div>
               
-              {/* Badges matching screenshot */}
-              <div className="flex items-center gap-1 ml-1">
-                <span className="flex items-center gap-1 bg-[#EDE9FE] text-[#7C3AED] text-[11px] font-bold px-1.5 py-0.5 rounded leading-none">
-                  <Zap className="w-3 h-3 fill-[#7C3AED]" />
-                  <span>5x</span>
+              {/* Engine Badges */}
+              <div className="flex items-center gap-1.5 ml-1">
+                <span className={cn(
+                  "px-2 py-0.5 rounded text-[10px] font-black uppercase flex items-center gap-1",
+                  assetType === 'crypto' ? "bg-amber-100 text-amber-800" :
+                  assetType === 'stock_us' ? "bg-blue-100 text-blue-800" : "bg-emerald-100 text-emerald-800"
+                )}>
+                  {engine.market}
                 </span>
-                <span className="border border-[#00B26A] text-[#00B26A] bg-[#ECFDF5] text-[10px] font-bold px-1.5 py-0.5 rounded leading-none">
-                  TL
+                <span className={cn(
+                  "text-[10px] font-bold px-2 py-0.5 rounded flex items-center gap-1 border",
+                  marketStatus.isOpen 
+                    ? "bg-emerald-50 text-[#00B26A] border-emerald-200" 
+                    : "bg-gray-100 text-gray-500 border-gray-200"
+                )}>
+                  <span className={cn("w-1.5 h-1.5 rounded-full", marketStatus.isOpen ? "bg-[#00B26A] animate-ping" : "bg-gray-400")} />
+                  {marketStatus.status}
                 </span>
-                <div className="w-5 h-5 rounded-full border border-emerald-400 text-[#00B26A] flex items-center justify-center">
-                  <Moon className="w-3 h-3 text-[#00B26A] fill-[#00B26A]" />
-                </div>
               </div>
             </div>
 
@@ -462,8 +492,8 @@ export function AssetDetailsPage({ symbol, onBack }: AssetDetailsPageProps) {
 
         {/* PRICE DISPLAY */}
         <div className="flex flex-col mt-2">
-          <h2 className="text-[32px] font-extrabold text-gray-900 leading-none tracking-tight">
-            {assetData.price}
+          <h2 className="text-[32px] font-extrabold text-gray-900 leading-none tracking-tight font-mono">
+            {isIdr ? `Rp ${assetData.price}` : `$${assetData.price}`}
           </h2>
           <div className="flex items-center gap-1.5 mt-1.5">
             <span className={cn(
@@ -479,10 +509,10 @@ export function AssetDetailsPage({ symbol, onBack }: AssetDetailsPageProps) {
         {/* CATEGORY / TAG PILLS */}
         <div className="flex items-center gap-2 mt-2.5">
           <span className="border border-[#00B26A] text-[#00B26A] text-[11px] font-semibold px-2.5 py-0.5 rounded-full">
-            {displaySymbol === 'BBCA' || displaySymbol === 'BBRI' || displaySymbol === 'BMRI' || displaySymbol === 'BBNI' ? 'Bank' : isIdr ? 'Saham' : 'Crypto'}
+            {assetType === 'crypto' ? 'Cryptocurrency' : assetType === 'stock_us' ? 'US Equity' : 'Saham IDX'}
           </span>
-          <span className="border border-[#00B26A] text-[#00B26A] text-[11px] font-semibold px-2.5 py-0.5 rounded-full">
-            Day Trade
+          <span className="border border-gray-200 text-gray-600 text-[11px] font-semibold px-2.5 py-0.5 rounded-full">
+            {assetType === 'crypto' ? '24/7 Trading' : (assetType === 'stock_us' ? 'NYSE/NASDAQ' : 'Papan Utama BEI')}
           </span>
         </div>
       </div>
@@ -505,25 +535,25 @@ export function AssetDetailsPage({ symbol, onBack }: AssetDetailsPageProps) {
           onClick={() => setShowBuyOrder(true)} 
           className="w-full bg-[#00AA5B] hover:bg-[#009650] active:scale-[0.99] text-white font-bold py-3 rounded-lg text-base shadow-xs transition-all flex items-center justify-center cursor-pointer"
         >
-          Beli
+          Beli {displaySymbol}
         </button>
       </div>
 
       {/* NAVIGATION SUB-TABS (STICKY BAR) */}
       <div className="w-full bg-white sticky top-12 z-20 border-b border-gray-100">
-        <div className="flex items-center justify-between text-[11px] font-bold overflow-x-auto no-scrollbar px-4 text-gray-500 uppercase tracking-wide">
-          {(['STREAM', 'KEYSTATS', 'ORDERBOOK', 'ANALISIS', 'FINANSIAL', 'SEASONALITY', 'PERBANDINGAN'] as const).map(tab => (
+        <div className="flex items-center gap-1 text-[11.5px] font-bold overflow-x-auto no-scrollbar px-3 text-gray-500 uppercase tracking-wide">
+          {availableTabs.map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
               className={cn(
-                "py-2.5 px-2 cursor-pointer whitespace-nowrap relative transition-colors",
+                "py-2.5 px-2.5 cursor-pointer whitespace-nowrap relative transition-colors shrink-0",
                 activeTab === tab ? "text-[#00B26A] font-extrabold" : "text-gray-500 hover:text-gray-800"
               )}
             >
               {tab}
               {activeTab === tab && (
-                <div className="absolute bottom-0 left-2 right-2 h-[2px] bg-[#00B26A] rounded-full" />
+                <div className="absolute bottom-0 left-2 right-2 h-[2.5px] bg-[#00B26A] rounded-full" />
               )}
             </button>
           ))}
@@ -592,8 +622,8 @@ export function AssetDetailsPage({ symbol, onBack }: AssetDetailsPageProps) {
           <div className="divide-y divide-gray-100 mt-1">
             {streamPosts
               .filter(p => !streamSearch || p.text.toLowerCase().includes(streamSearch.toLowerCase()))
-              .map((post) => (
-                <div key={post.id} className="p-4 hover:bg-gray-50/50 transition-colors">
+              .map((post, idx) => (
+                <div key={`stream-post-${post.id}-${idx}`} className="p-4 hover:bg-gray-50/50 transition-colors">
                   {/* Author Row */}
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-2.5">
@@ -891,6 +921,69 @@ export function AssetDetailsPage({ symbol, onBack }: AssetDetailsPageProps) {
             </table>
           </div>
         </div>
+      )}
+
+      {/* TAB CONTENT: CORP ACTION */}
+      {activeTab === 'CORP ACTION' && (
+        <div className="p-4 pb-24 bg-white text-xs">
+          <h3 className="text-sm font-bold text-gray-900 mb-3">Aksi Korporasi (Corporate Actions) {displaySymbol}</h3>
+          <div className="divide-y divide-gray-100">
+            <div className="py-3 flex justify-between items-start">
+              <div>
+                <span className="inline-block px-2 py-0.5 bg-emerald-50 text-[#00B26A] text-[10px] font-bold rounded mb-1">Dividen Tunai</span>
+                <p className="font-bold text-gray-900 text-[12px]">Pembagian Dividen Interim 2026</p>
+                <p className="text-[11px] text-gray-500 mt-0.5">Cum Date: 12 Jun 2026 • Payment Date: 28 Jun 2026</p>
+              </div>
+              <span className="font-bold text-gray-900 text-[13px]">{isIdr ? 'Rp 35.00 / lbr' : '$0.45 / shr'}</span>
+            </div>
+            <div className="py-3 flex justify-between items-start">
+              <div>
+                <span className="inline-block px-2 py-0.5 bg-blue-50 text-blue-600 text-[10px] font-bold rounded mb-1">RUPS Tahunan</span>
+                <p className="font-bold text-gray-900 text-[12px]">Rapat Umum Pemegang Saham Tahunan (RUPST)</p>
+                <p className="text-[11px] text-gray-500 mt-0.5">Tanggal: 25 Mei 2026 • Lokasi: Kantor Pusat</p>
+              </div>
+              <span className="font-semibold text-gray-600 text-[11px]">Selesai</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TAB CONTENT: INSIDER */}
+      {activeTab === 'INSIDER' && (
+        <div className="p-4 pb-24 bg-white text-xs">
+          <h3 className="text-sm font-bold text-gray-900 mb-3">Transaksi Orang Dalam (Insider Trading) {displaySymbol}</h3>
+          <div className="divide-y divide-gray-100">
+            <div className="py-2.5 flex justify-between items-center text-[11.5px]">
+              <div>
+                <p className="font-bold text-gray-900">EDDY SANUSI</p>
+                <p className="text-gray-400 text-[10px]">Direktur • 02 Agu 2026</p>
+              </div>
+              <div className="text-right">
+                <span className="text-[#00B26A] font-bold">+5,000,000 Lot</span>
+                <p className="text-gray-500 text-[10px]">Beli @ Rp 180</p>
+              </div>
+            </div>
+            <div className="py-2.5 flex justify-between items-center text-[11.5px]">
+              <div>
+                <p className="font-bold text-gray-900">BAKRIE CAPITAL INDONESIA</p>
+                <p className="text-gray-400 text-[10px]">Pemegang Saham Utama • 15 Jul 2026</p>
+              </div>
+              <div className="text-right">
+                <span className="text-rose-500 font-bold">-2,500,000 Lot</span>
+                <p className="text-gray-500 text-[10px]">Jual @ Rp 175</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TAB CONTENT: PROFIL (EXACT STOCKBIT LAYOUT & REAL TIME DATA) */}
+      {activeTab === 'PROFIL' && (
+        <CompanyProfileView 
+          symbol={symbol}
+          displaySymbol={displaySymbol}
+          isIdr={isIdr}
+        />
       )}
 
       {/* BUY ORDER MODAL */}
